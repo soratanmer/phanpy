@@ -1,3 +1,4 @@
+import { t, Trans } from '@lingui/macro';
 import { useEffect, useRef } from 'preact/hooks';
 import { useSnapshot } from 'valtio';
 
@@ -16,17 +17,19 @@ import useTitle from '../utils/useTitle';
 const LIMIT = 20;
 
 function Following({ title, path, id, ...props }) {
-  useTitle(title || 'Following', path || '/following');
+  useTitle(title || t`Following`, path || '/following');
   const { masto, streaming, instance } = api();
   const snapStates = useSnapshot(states);
   const homeIterator = useRef();
   const latestItem = useRef();
+  __BENCHMARK.end('time-to-following');
 
   console.debug('RENDER Following', title, id);
   const supportsPixelfed = supports('@pixelfed/home-include-reblogs');
 
   async function fetchHome(firstLoad) {
     if (firstLoad || !homeIterator.current) {
+      __BENCHMARK.start('fetch-home-first');
       homeIterator.current = masto.v1.timelines.home.list({ limit: LIMIT });
     }
     if (supportsPixelfed && homeIterator.current?.nextParams) {
@@ -63,6 +66,7 @@ function Following({ title, path, id, ...props }) {
         return bDate - aDate;
       });
     }
+    __BENCHMARK.end('fetch-home-first');
     return {
       ...results,
       value,
@@ -127,10 +131,10 @@ function Following({ title, path, id, ...props }) {
 
   return (
     <Timeline
-      title={title || 'Following'}
+      title={title || t`Following`}
       id={id || 'following'}
-      emptyText="Nothing to see here."
-      errorText="Unable to load posts."
+      emptyText={t`Nothing to see here.`}
+      errorText={t`Unable to load posts.`}
       instance={instance}
       fetchItems={fetchHome}
       checkForUpdates={checkForUpdates}
