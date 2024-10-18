@@ -118,18 +118,14 @@ export function getCurrentInstance() {
 // Massage these instance configurations to match the Mastodon API
 // - Pleroma
 function getInstanceConfiguration(instance) {
-  const {
-    configuration,
-    maxMediaAttachments,
-    maxTootChars,
-    pleroma,
-    pollLimits,
-  } = instance;
+  const { configuration, maxMediaAttachments, maxTootChars, pollLimits } =
+    instance;
 
   const statuses = configuration?.statuses || {};
   if (maxMediaAttachments) {
     statuses.maxMediaAttachments ??= maxMediaAttachments;
   }
+
   if (maxTootChars) {
     statuses.maxCharacters ??= maxTootChars;
   }
@@ -152,6 +148,13 @@ function getInstanceConfiguration(instance) {
 export function getCurrentInstanceConfiguration() {
   const instance = getCurrentInstance();
   return getInstanceConfiguration(instance);
+}
+
+export function getVapidKey() {
+  // Vapid key has moved from account to instance config
+  const config = getCurrentInstanceConfiguration();
+  const vapidKey = config?.vapid?.publicKey || config?.vapid?.public_key;
+  return vapidKey || getCurrentAccount()?.vapidKey;
 }
 
 export function isMediaFirstInstance() {

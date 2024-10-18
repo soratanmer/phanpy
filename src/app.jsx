@@ -1,6 +1,8 @@
 import './app.css';
 
+import { useLingui } from '@lingui/react';
 import debounce from 'just-debounce-it';
+import { memo } from 'preact/compat';
 import {
   useEffect,
   useLayoutEffect,
@@ -46,6 +48,8 @@ import Trending from './pages/trending';
 import Welcome from './pages/welcome';
 import {
   api,
+  hasInstance,
+  hasPreferences,
   initAccount,
   initClient,
   initInstance,
@@ -55,7 +59,11 @@ import { getAccessToken } from './utils/auth';
 import focusDeck from './utils/focus-deck';
 import states, { initStates, statusKey } from './utils/states';
 import store from './utils/store';
-import { getCurrentAccount, setCurrentAccountID } from './utils/store-utils';
+import {
+  getAccount,
+  getCurrentAccount,
+  setCurrentAccountID,
+} from './utils/store-utils';
 
 import './utils/toast-alert';
 
@@ -296,9 +304,36 @@ subscribe(states, (changes) => {
   }
 });
 
+const BENCHES = new Map();
+window.__BENCH_RESULTS = new Map();
+window.__BENCHMARK = {
+  start(name) {
+    if (!import.meta.env.DEV && !import.meta.env.PHANPY_DEV) return;
+    // If already started, ignore
+    if (BENCHES.has(name)) return;
+    const start = performance.now();
+    BENCHES.set(name, start);
+  },
+  end(name) {
+    if (!import.meta.env.DEV && !import.meta.env.PHANPY_DEV) return;
+    const start = BENCHES.get(name);
+    if (start) {
+      const end = performance.now();
+      const duration = end - start;
+      __BENCH_RESULTS.set(name, duration);
+      BENCHES.delete(name);
+    }
+  },
+};
+
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [uiState, setUIState] = useState('loading');
+  __BENCHMARK.start('app-init');
+  __BENCHMARK.start('time-to-following');
+  __BENCHMARK.start('time-to-home');
+  __BENCHMARK.start('time-to-isLoggedIn');
+  useLingui();
 
   useEffect(() => {
     const instanceURL = store.local.get('instanceURL');
@@ -315,9 +350,10 @@ function App() {
         window.location.pathname || '/',
       );
 
-      const clientID = store.session.get('clientID');
-      const clientSecret = store.session.get('clientSecret');
-      const vapidKey = store.session.get('vapidKey');
+      const clientID = store.sessionCookie.get('clientID');
+      const clientSecret = store.sessionCookie.get('clientSecret');
+      const vapidKey = store.sessionCookie.get('vapidKey');
+      const verifier = store.sessionCookie.get('codeVerifier');
 
       (async () => {
         setUIState('loading');
@@ -326,22 +362,47 @@ function App() {
           client_id: clientID,
           client_secret: clientSecret,
           code,
+          code_verifier: verifier || undefined,
         });
 
-        const client = initClient({ instance: instanceURL, accessToken });
-        await Promise.allSettled([
-          initPreferences(client),
-          initInstance(client, instanceURL),
-          initAccount(client, instanceURL, accessToken, vapidKey),
-        ]);
-        initStates();
+        if (accessToken) {
+          const client = initClient({ instance: instanceURL, accessToken });
+          await Promise.allSettled([
+            initPreferences(client),
+            initInstance(client, instanceURL),
+            initAccount(client, instanceURL, accessToken, vapidKey),
+          ]);
+          initStates();
+          window.__IGNORE_GET_ACCOUNT_ERROR__ = true;
 
-        setIsLoggedIn(true);
-        setUIState('default');
+          setIsLoggedIn(true);
+          setUIState('default');
+        } else {
+          setUIState('error');
+        }
+        __BENCHMARK.end('app-init');
       })();
     } else {
       window.__IGNORE_GET_ACCOUNT_ERROR__ = true;
-      const account = getCurrentAccount();
+      const searchAccount = decodeURIComponent(
+        (window.location.search.match(/account=([^&]+)/) || [, ''])[1],
+      );
+      let account;
+      if (searchAccount) {
+        account = getAccount(searchAccount);
+        console.log('searchAccount', searchAccount, account);
+        if (account) {
+          setCurrentAccountID(account.info.id);
+          window.history.replaceState(
+            {},
+            document.title,
+            window.location.pathname || '/',
+          );
+        }
+      }
+      if (!account) {
+        account = getCurrentAccount();
+      }
       if (account) {
         setCurrentAccountID(account.info.id);
         const { client } = api({ account });
@@ -351,18 +412,33 @@ function App() {
         setUIState('loading');
         (async () => {
           try {
-            await initPreferences(client);
-            await initInstance(client, instance);
+            if (hasPreferences() && hasInstance(instance)) {
+              // Non-blocking
+              initPreferences(client);
+              initInstance(client, instance);
+            } else {
+              await Promise.allSettled([
+                initPreferences(client),
+                initInstance(client, instance),
+              ]);
+            }
           } catch (e) {
           } finally {
             setIsLoggedIn(true);
             setUIState('default');
+            __BENCHMARK.end('app-init');
           }
         })();
       } else {
         setUIState('default');
+        __BENCHMARK.end('app-init');
       }
     }
+
+    // Cleanup
+    store.sessionCookie.del('clientID');
+    store.sessionCookie.del('clientSecret');
+    store.sessionCookie.del('codeVerifier');
   }, []);
 
   let location = useLocation();
@@ -377,27 +453,36 @@ function App() {
     return <HttpRoute />;
   }
 
+  if (uiState === 'loading') {
+    return <Loader id="loader-root" />;
+  }
+
   return (
     <>
-      <PrimaryRoutes isLoggedIn={isLoggedIn} loading={uiState === 'loading'} />
+      <PrimaryRoutes isLoggedIn={isLoggedIn} />
       <SecondaryRoutes isLoggedIn={isLoggedIn} />
-      {uiState === 'default' && (
-        <Routes>
-          <Route path="/:instance?/s/:id" element={<StatusRoute />} />
-        </Routes>
-      )}
+      <Routes>
+        <Route path="/:instance?/s/:id" element={<StatusRoute />} />
+      </Routes>
       {isLoggedIn && <ComposeButton />}
       {isLoggedIn && <Shortcuts />}
       <Modals />
       {isLoggedIn && <NotificationService />}
       <BackgroundService isLoggedIn={isLoggedIn} />
-      {uiState !== 'loading' && <SearchCommand onClose={focusDeck} />}
+      <SearchCommand onClose={focusDeck} />
       <KeyboardShortcutsHelp />
     </>
   );
 }
 
-function PrimaryRoutes({ isLoggedIn, loading }) {
+function Root({ isLoggedIn }) {
+  if (isLoggedIn) {
+    __BENCHMARK.end('time-to-isLoggedIn');
+  }
+  return isLoggedIn ? <Home /> : <Welcome />;
+}
+
+const PrimaryRoutes = memo(({ isLoggedIn }) => {
   const location = useLocation();
   const nonRootLocation = useMemo(() => {
     const { pathname } = location;
@@ -406,23 +491,12 @@ function PrimaryRoutes({ isLoggedIn, loading }) {
 
   return (
     <Routes location={nonRootLocation || location}>
-      <Route
-        path="/"
-        element={
-          isLoggedIn ? (
-            <Home />
-          ) : loading ? (
-            <Loader id="loader-root" />
-          ) : (
-            <Welcome />
-          )
-        }
-      />
+      <Route path="/" element={<Root isLoggedIn={isLoggedIn} />} />
       <Route path="/login" element={<Login />} />
       <Route path="/welcome" element={<Welcome />} />
     </Routes>
   );
-}
+});
 
 function getPrevLocation() {
   return states.prevLocation || null;
