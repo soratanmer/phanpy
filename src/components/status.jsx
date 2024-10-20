@@ -1,6 +1,8 @@
 import './status.css';
 import '@justinribeiro/lite-youtube';
 
+import { msg, plural, Plural, t, Trans } from '@lingui/macro';
+import { useLingui } from '@lingui/react';
 import {
   ControlledMenu,
   Menu,
@@ -18,13 +20,14 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from 'preact/hooks';
 import punycode from 'punycode/';
 import { useHotkeys } from 'react-hotkeys-hook';
-import { detectAll } from 'tinyld/light';
+// import { detectAll } from 'tinyld/light';
 import { useLongPress } from 'use-long-press';
 import { useSnapshot } from 'valtio';
 
@@ -49,7 +52,6 @@ import htmlContentLength from '../utils/html-content-length';
 import isRTL from '../utils/is-rtl';
 import isMastodonLinkMaybe from '../utils/isMastodonLinkMaybe';
 import localeMatch from '../utils/locale-match';
-import mem from '../utils/mem';
 import niceDateTime from '../utils/nice-date-time';
 import openCompose from '../utils/open-compose';
 import pmem from '../utils/pmem';
@@ -88,10 +90,11 @@ function fetchAccount(id, masto) {
 const memFetchAccount = pmem(throttle(fetchAccount));
 
 const visibilityText = {
-  public: 'Public',
-  unlisted: 'Unlisted',
-  private: 'Followers only',
-  direct: 'Private mention',
+  public: msg`Public`,
+  local: msg`Local`,
+  unlisted: msg`Unlisted`,
+  private: msg`Followers only`,
+  direct: msg`Private mention`,
 };
 
 const isIOS =
@@ -122,11 +125,71 @@ function getPostText(status) {
   );
 }
 
-const PostContent = memo(
+function isTranslateble(content) {
+  if (!content) return false;
+  content = content.trim();
+  if (!content) return false;
+  const text = getHTMLText(content, {
+    preProcess: (dom) => {
+      // Remove .mention, pre, code, a:has(.invisible)
+      for (const a of dom.querySelectorAll(
+        '.mention, pre, code, a:has(.invisible)',
+      )) {
+        a.remove();
+      }
+    },
+  });
+  return !!text;
+}
+
+function getHTMLTextForDetectLang(content) {
+  return getHTMLText(content, {
+    preProcess: (dom) => {
+      // Remove anything that can skew the language detection
+
+      // Remove .mention, .hashtag, pre, code, a:has(.invisible)
+      for (const a of dom.querySelectorAll(
+        '.mention, .hashtag, pre, code, a:has(.invisible)',
+      )) {
+        a.remove();
+      }
+
+      // Remove links that contains text that starts with https?://
+      for (const a of dom.querySelectorAll('a')) {
+        const text = a.innerText.trim();
+        if (text.startsWith('https://') || text.startsWith('http://')) {
+          a.remove();
+        }
+      }
+    },
+  });
+}
+
+const HTTP_REGEX = /^http/i;
+const PostContent =
+  /*memo(*/
   ({ post, instance, previewMode }) => {
     const { content, emojis, language, mentions, url } = post;
+
+    const divRef = useRef();
+    useLayoutEffect(() => {
+      if (!divRef.current) return;
+      const dom = enhanceContent(content, {
+        emojis,
+        returnDOM: true,
+      });
+      // Remove target="_blank" from links
+      for (const a of dom.querySelectorAll('a.u-url[target="_blank"]')) {
+        if (!HTTP_REGEX.test(a.innerText.trim())) {
+          a.removeAttribute('target');
+        }
+      }
+      divRef.current.replaceChildren(dom.cloneNode(true));
+    }, [content, emojis.length]);
+
     return (
       <div
+        ref={divRef}
         lang={language}
         dir="auto"
         class="inner-content"
@@ -136,28 +199,28 @@ const PostContent = memo(
           previewMode,
           statusURL: url,
         })}
-        dangerouslySetInnerHTML={{
-          __html: enhanceContent(content, {
-            emojis,
-            postEnhanceDOM: (dom) => {
-              // Remove target="_blank" from links
-              dom.querySelectorAll('a.u-url[target="_blank"]').forEach((a) => {
-                if (!/http/i.test(a.innerText.trim())) {
-                  a.removeAttribute('target');
-                }
-              });
-            },
-          }),
-        }}
+        // dangerouslySetInnerHTML={{
+        //   __html: enhanceContent(content, {
+        //     emojis,
+        //     postEnhanceDOM: (dom) => {
+        //       // Remove target="_blank" from links
+        //       dom.querySelectorAll('a.u-url[target="_blank"]').forEach((a) => {
+        //         if (!/http/i.test(a.innerText.trim())) {
+        //           a.removeAttribute('target');
+        //         }
+        //       });
+        //     },
+        //   }),
+        // }}
       />
     );
-  },
+  }; /*,
   (oldProps, newProps) => {
     const { post: oldPost } = oldProps;
     const { post: newPost } = newProps;
     return oldPost.content === newPost.content;
   },
-);
+);*/
 
 const SIZE_CLASS = {
   s: 'small',
@@ -165,7 +228,8 @@ const SIZE_CLASS = {
   l: 'large',
 };
 
-const detectLang = mem((text) => {
+const detectLang = pmem(async (text) => {
+  const { detectAll } = await import('tinyld/light');
   text = text?.trim();
 
   // Ref: https://github.com/komodojp/tinyld/blob/develop/docs/benchmark.md
@@ -183,6 +247,27 @@ const detectLang = mem((text) => {
   }
   return null;
 });
+
+const readMoreText = msg`Read more →`;
+
+// All this work just to make sure this only lazy-run once
+// Because first run is slow due to intl-localematcher
+const DIFFERENT_LANG_CHECK = {};
+const checkDifferentLanguage = (
+  language,
+  contentTranslationHideLanguages = [],
+) => {
+  if (!language) return false;
+  const targetLanguage = getTranslateTargetLanguage(true);
+  const different =
+    language !== targetLanguage &&
+    !localeMatch([language], [targetLanguage]) &&
+    !contentTranslationHideLanguages.find(
+      (l) => language === l || localeMatch([language], [l]),
+    );
+  DIFFERENT_LANG_CHECK[language + contentTranslationHideLanguages] = true;
+  return different;
+};
 
 function Status({
   statusID,
@@ -207,6 +292,8 @@ function Status({
   showReplyParent,
   mediaFirst,
 }) {
+  const { _ } = useLingui();
+
   if (skeleton) {
     return (
       <div
@@ -296,32 +383,10 @@ function Status({
   useEffect(() => {
     if (!content) return;
     if (_language) return;
+    if (languageAutoDetected) return;
     let timer;
-    timer = setTimeout(() => {
-      let detected = detectLang(
-        getHTMLText(content, {
-          preProcess: (dom) => {
-            // Remove anything that can skew the language detection
-
-            // Remove .mention, .hashtag, pre, code, a:has(.invisible)
-            dom
-              .querySelectorAll(
-                '.mention, .hashtag, pre, code, a:has(.invisible)',
-              )
-              .forEach((a) => {
-                a.remove();
-              });
-
-            // Remove links that contains text that starts with https?://
-            dom.querySelectorAll('a').forEach((a) => {
-              const text = a.innerText.trim();
-              if (text.startsWith('https://') || text.startsWith('http://')) {
-                a.remove();
-              }
-            });
-          },
-        }),
-      );
+    timer = setTimeout(async () => {
+      let detected = await detectLang(getHTMLTextForDetectLang(content));
       setLanguageAutoDetected(detected);
     }, 1000);
     return () => clearTimeout(timer);
@@ -430,7 +495,7 @@ function Status({
           onMouseEnter={debugHover}
         >
           <div class="status-pre-meta">
-            <Icon icon="group" size="l" alt="Group" />{' '}
+            <Icon icon="group" size="l" alt={t`Group`} />{' '}
             <NameText account={status.account} instance={instance} showAvatar />
           </div>
           <Status
@@ -454,8 +519,10 @@ function Status({
       >
         <div class="status-pre-meta">
           <Icon icon="rocket" size="l" />{' '}
-          <NameText account={status.account} instance={instance} showAvatar />{' '}
-          <span>boosted</span>
+          <Trans>
+            <NameText account={status.account} instance={instance} showAvatar />{' '}
+            <span>boosted</span>
+          </Trans>
         </div>
         <Status
           status={statusID ? null : reblog}
@@ -504,9 +571,9 @@ function Status({
   const isSizeLarge = size === 'l';
 
   const [forceTranslate, setForceTranslate] = useState(_forceTranslate);
-  const targetLanguage = getTranslateTargetLanguage(true);
-  const contentTranslationHideLanguages =
-    snapStates.settings.contentTranslationHideLanguages || [];
+  // const targetLanguage = getTranslateTargetLanguage(true);
+  // const contentTranslationHideLanguages =
+  //   snapStates.settings.contentTranslationHideLanguages || [];
   const { contentTranslation, contentTranslationAutoInline } =
     snapStates.settings;
   if (!contentTranslation) enableTranslate = false;
@@ -548,11 +615,10 @@ function Status({
   const spoilerContentRef = useTruncated();
   const contentRef = useTruncated();
   const mediaContainerRef = useTruncated();
-  const readMoreText = 'Read more →';
 
   const statusRef = useRef(null);
 
-  const unauthInteractionErrorMessage = `Sorry, your current logged-in instance can't interact with this post from another instance.`;
+  const unauthInteractionErrorMessage = t`Sorry, your current logged-in instance can't interact with this post from another instance.`;
 
   const textWeight = useCallback(
     () =>
@@ -606,44 +672,44 @@ function Status({
     );
   }, [createdAtDate]);
 
-  const boostStatus = async () => {
-    if (!sameInstance || !authenticated) {
-      alert(unauthInteractionErrorMessage);
-      return false;
-    }
-    try {
-      if (!reblogged) {
-        let confirmText = 'Boost this post?';
-        if (mediaNoDesc) {
-          confirmText += '\n\n⚠️ Some media have no descriptions.';
-        }
-        const yes = confirm(confirmText);
-        if (!yes) {
-          return false;
-        }
-      }
-      // Optimistic
-      states.statuses[sKey] = {
-        ...status,
-        reblogged: !reblogged,
-        reblogsCount: reblogsCount + (reblogged ? -1 : 1),
-      };
-      if (reblogged) {
-        const newStatus = await masto.v1.statuses.$select(id).unreblog();
-        saveStatus(newStatus, instance);
-        return true;
-      } else {
-        const newStatus = await masto.v1.statuses.$select(id).reblog();
-        saveStatus(newStatus, instance);
-        return true;
-      }
-    } catch (e) {
-      console.error(e);
-      // Revert optimistism
-      states.statuses[sKey] = status;
-      return false;
-    }
-  };
+  // const boostStatus = async () => {
+  //   if (!sameInstance || !authenticated) {
+  //     alert(unauthInteractionErrorMessage);
+  //     return false;
+  //   }
+  //   try {
+  //     if (!reblogged) {
+  //       let confirmText = 'Boost this post?';
+  //       if (mediaNoDesc) {
+  //         confirmText += '\n\n⚠️ Some media have no descriptions.';
+  //       }
+  //       const yes = confirm(confirmText);
+  //       if (!yes) {
+  //         return false;
+  //       }
+  //     }
+  //     // Optimistic
+  //     states.statuses[sKey] = {
+  //       ...status,
+  //       reblogged: !reblogged,
+  //       reblogsCount: reblogsCount + (reblogged ? -1 : 1),
+  //     };
+  //     if (reblogged) {
+  //       const newStatus = await masto.v1.statuses.$select(id).unreblog();
+  //       saveStatus(newStatus, instance);
+  //       return true;
+  //     } else {
+  //       const newStatus = await masto.v1.statuses.$select(id).reblog();
+  //       saveStatus(newStatus, instance);
+  //       return true;
+  //     }
+  //   } catch (e) {
+  //     console.error(e);
+  //     // Revert optimistism
+  //     states.statuses[sKey] = status;
+  //     return false;
+  //   }
+  // };
   const confirmBoostStatus = async () => {
     if (!sameInstance || !authenticated) {
       alert(unauthInteractionErrorMessage);
@@ -705,8 +771,8 @@ function Status({
       if (!isSizeLarge && done) {
         showToast(
           favourited
-            ? `Unliked @${username || acct}'s post`
-            : `Liked @${username || acct}'s post`,
+            ? t`Unliked @${username || acct}'s post`
+            : t`Liked @${username || acct}'s post`,
         );
       }
     } catch (e) {}
@@ -745,20 +811,44 @@ function Status({
       if (!isSizeLarge && done) {
         showToast(
           bookmarked
-            ? `Unbookmarked @${username || acct}'s post`
-            : `Bookmarked @${username || acct}'s post`,
+            ? t`Unbookmarked @${username || acct}'s post`
+            : t`Bookmarked @${username || acct}'s post`,
         );
       }
     } catch (e) {}
   };
 
-  const differentLanguage =
-    !!language &&
-    language !== targetLanguage &&
-    !localeMatch([language], [targetLanguage]) &&
-    !contentTranslationHideLanguages.find(
-      (l) => language === l || localeMatch([language], [l]),
-    );
+  // const differentLanguage =
+  //   !!language &&
+  //   language !== targetLanguage &&
+  //   !localeMatch([language], [targetLanguage]) &&
+  //   !contentTranslationHideLanguages.find(
+  //     (l) => language === l || localeMatch([language], [l]),
+  //   );
+  const contentTranslationHideLanguages =
+    snapStates.settings.contentTranslationHideLanguages || [];
+  const [differentLanguage, setDifferentLanguage] = useState(
+    DIFFERENT_LANG_CHECK[language + contentTranslationHideLanguages]
+      ? checkDifferentLanguage(language, contentTranslationHideLanguages)
+      : false,
+  );
+  useEffect(() => {
+    if (
+      !language ||
+      differentLanguage ||
+      DIFFERENT_LANG_CHECK[language + contentTranslationHideLanguages]
+    ) {
+      return;
+    }
+    let timeout = setTimeout(() => {
+      const different = checkDifferentLanguage(
+        language,
+        contentTranslationHideLanguages,
+      );
+      if (different) setDifferentLanguage(different);
+    }, 1);
+    return () => clearTimeout(timeout);
+  }, [language, differentLanguage, contentTranslationHideLanguages]);
 
   const reblogIterator = useRef();
   const favouriteIterator = useRef();
@@ -820,7 +910,7 @@ function Status({
             <MenuItem onClick={replyStatus}>
               <Icon icon="comment" />
               <span>
-                {repliesCount > 0 ? shortenNumber(repliesCount) : 'Reply'}
+                {repliesCount > 0 ? shortenNumber(repliesCount) : t`Reply`}
               </span>
             </MenuItem>
             <MenuConfirm
@@ -828,7 +918,7 @@ function Status({
               confirmLabel={
                 <>
                   <Icon icon="rocket" />
-                  <span>{reblogged ? 'Unboost' : 'Boost'}</span>
+                  <span>{reblogged ? t`Unboost` : t`Boost`}</span>
                 </>
               }
               className={`menu-reblog ${reblogged ? 'checked' : ''}`}
@@ -843,23 +933,29 @@ function Status({
                   }}
                 >
                   <Icon icon="quote" />
-                  <span>Quote</span>
+                  <span>
+                    <Trans>Quote</Trans>
+                  </span>
                 </MenuItem>
               }
               menuFooter={
                 mediaNoDesc && !reblogged ? (
                   <div class="footer">
                     <Icon icon="alert" />
-                    Some media have no descriptions.
+                    <Trans>Some media have no descriptions.</Trans>
                   </div>
                 ) : (
                   statusMonthsAgo >= 3 && (
                     <div class="footer">
                       <Icon icon="info" />
                       <span>
-                        Old post (
-                        <strong>{rtf.format(-statusMonthsAgo, 'month')}</strong>
-                        )
+                        <Trans>
+                          Old post (
+                          <strong>
+                            {rtf.format(-statusMonthsAgo, 'month')}
+                          </strong>
+                          )
+                        </Trans>
                       </span>
                     </div>
                   )
@@ -872,8 +968,8 @@ function Status({
                   if (!isSizeLarge && done) {
                     showToast(
                       reblogged
-                        ? `Unboosted @${username || acct}'s post`
-                        : `Boosted @${username || acct}'s post`,
+                        ? t`Unboosted @${username || acct}'s post`
+                        : t`Boosted @${username || acct}'s post`,
                     );
                   }
                 } catch (e) {}
@@ -884,8 +980,8 @@ function Status({
                 {reblogsCount > 0
                   ? shortenNumber(reblogsCount)
                   : reblogged
-                  ? 'Unboost'
-                  : 'Boost…'}
+                  ? t`Unboost`
+                  : t`Boost…`}
               </span>
             </MenuConfirm>
             <MenuItem
@@ -897,8 +993,8 @@ function Status({
                 {favouritesCount > 0
                   ? shortenNumber(favouritesCount)
                   : favourited
-                  ? 'Unlike'
-                  : 'Like'}
+                  ? t`Unlike`
+                  : t`Like`}
               </span>
             </MenuItem>
             {supports('@mastodon/post-bookmark') && (
@@ -907,7 +1003,7 @@ function Status({
                 className={`menu-bookmark ${bookmarked ? 'checked' : ''}`}
               >
                 <Icon icon="bookmark" />
-                <span>{bookmarked ? 'Unbookmark' : 'Bookmark'}</span>
+                <span>{bookmarked ? t`Unbookmark` : t`Bookmark`}</span>
               </MenuItem>
             )}
           </div>
@@ -921,7 +1017,7 @@ function Status({
           <MenuItem
             onClick={() => {
               states.showGenericAccounts = {
-                heading: 'Boosted/Liked by…',
+                heading: t`Boosted/Liked by…`,
                 fetchAccounts: fetchBoostedLikedByAccounts,
                 instance,
                 showReactions: true,
@@ -931,7 +1027,7 @@ function Status({
           >
             <Icon icon="react" />
             <span>
-              Boosted/Liked by<span class="more-insignificant">…</span>
+              <Trans>Boosted/Liked by…</Trans>
             </span>
           </MenuItem>
         </>
@@ -950,7 +1046,9 @@ function Status({
                 }}
               >
                 <Icon icon="translate" />
-                <span>Translate</span>
+                <span>
+                  <Trans>Translate</Trans>
+                </span>
               </MenuItem>
               {supportsTTS && (
                 <MenuItem
@@ -962,7 +1060,9 @@ function Status({
                   }}
                 >
                   <Icon icon="speak" />
-                  <span>Speak</span>
+                  <span>
+                    <Trans>Speak</Trans>
+                  </span>
                 </MenuItem>
               )}
             </div>
@@ -973,7 +1073,9 @@ function Status({
                   to={`${instance ? `/${instance}` : ''}/s/${id}?translate=1`}
                 >
                   <Icon icon="translate" />
-                  <span>Translate</span>
+                  <span>
+                    <Trans>Translate</Trans>
+                  </span>
                 </MenuLink>
                 {supportsTTS && (
                   <MenuItem
@@ -985,7 +1087,9 @@ function Status({
                     }}
                   >
                     <Icon icon="speak" />
-                    <span>Speak</span>
+                    <span>
+                      <Trans>Speak</Trans>
+                    </span>
                   </MenuItem>
                 )}
               </div>
@@ -1007,10 +1111,13 @@ function Status({
           >
             <Icon icon="arrows-right" />
             <small>
-              View post by @{username || acct}
+              <Trans>
+                View post by{' '}
+                <span class="bidi-isolate">@{username || acct}</span>
+              </Trans>
               <br />
               <span class="more-insignificant">
-                {visibilityText[visibility]} • {createdDateText}
+                {_(visibilityText[visibility])} • {createdDateText}
               </span>
             </small>
           </MenuLink>
@@ -1025,16 +1132,25 @@ function Status({
           >
             <Icon icon="history" />
             <small>
-              Show Edit History
+              <Trans>Show Edit History</Trans>
               <br />
-              <span class="more-insignificant">Edited: {editedDateText}</span>
+              <span class="more-insignificant">
+                <Trans>Edited: {editedDateText}</Trans>
+              </span>
             </small>
           </MenuItem>
         </>
       )}
       <MenuItem href={url} target="_blank">
         <Icon icon="external" />
-        <small class="menu-double-lines">{nicePostURL(url)}</small>
+        <small
+          class="menu-double-lines"
+          style={{
+            maxWidth: '16em',
+          }}
+        >
+          {nicePostURL(url)}
+        </small>
       </MenuItem>
       <div class="menu-horizontal">
         <MenuItem
@@ -1042,15 +1158,17 @@ function Status({
             // Copy url to clipboard
             try {
               navigator.clipboard.writeText(url);
-              showToast('Link copied');
+              showToast(t`Link copied`);
             } catch (e) {
               console.error(e);
-              showToast('Unable to copy link');
+              showToast(t`Unable to copy link`);
             }
           }}
         >
           <Icon icon="link" />
-          <span>Copy</span>
+          <span>
+            <Trans>Copy</Trans>
+          </span>
         </MenuItem>
         {isPublic &&
           navigator?.share &&
@@ -1065,12 +1183,14 @@ function Status({
                   });
                 } catch (e) {
                   console.error(e);
-                  alert("Sharing doesn't seem to work.");
+                  alert(t`Sharing doesn't seem to work.`);
                 }
               }}
             >
               <Icon icon="share" />
-              <span>Share…</span>
+              <span>
+                <Trans>Share…</Trans>
+              </span>
             </MenuItem>
           )}
       </div>
@@ -1081,7 +1201,9 @@ function Status({
           }}
         >
           <Icon icon="code" />
-          <span>Embed post</span>
+          <span>
+            <Trans>Embed post</Trans>
+          </span>
         </MenuItem>
       )}
       {(isSelf || mentionSelf) && <MenuDivider />}
@@ -1093,13 +1215,15 @@ function Status({
                 .$select(id)
                 [muted ? 'unmute' : 'mute']();
               saveStatus(newStatus, instance);
-              showToast(muted ? 'Conversation unmuted' : 'Conversation muted');
+              showToast(
+                muted ? t`Conversation unmuted` : t`Conversation muted`,
+              );
             } catch (e) {
               console.error(e);
               showToast(
                 muted
-                  ? 'Unable to unmute conversation'
-                  : 'Unable to mute conversation',
+                  ? t`Unable to unmute conversation`
+                  : t`Unable to mute conversation`,
               );
             }
           }}
@@ -1107,12 +1231,16 @@ function Status({
           {muted ? (
             <>
               <Icon icon="unmute" />
-              <span>Unmute conversation</span>
+              <span>
+                <Trans>Unmute conversation</Trans>
+              </span>
             </>
           ) : (
             <>
               <Icon icon="mute" />
-              <span>Mute conversation</span>
+              <span>
+                <Trans>Mute conversation</Trans>
+              </span>
             </>
           )}
         </MenuItem>
@@ -1127,24 +1255,30 @@ function Status({
               saveStatus(newStatus, instance);
               showToast(
                 pinned
-                  ? 'Post unpinned from profile'
-                  : 'Post pinned to profile',
+                  ? t`Post unpinned from profile`
+                  : t`Post pinned to profile`,
               );
             } catch (e) {
               console.error(e);
-              showToast(pinned ? 'Unable to unpin post' : 'Unable to pin post');
+              showToast(
+                pinned ? t`Unable to unpin post` : t`Unable to pin post`,
+              );
             }
           }}
         >
           {pinned ? (
             <>
               <Icon icon="unpin" />
-              <span>Unpin from profile</span>
+              <span>
+                <Trans>Unpin from profile</Trans>
+              </span>
             </>
           ) : (
             <>
               <Icon icon="pin" />
-              <span>Pin to profile</span>
+              <span>
+                <Trans>Pin to profile</Trans>
+              </span>
             </>
           )}
         </MenuItem>
@@ -1160,7 +1294,9 @@ function Status({
               }}
             >
               <Icon icon="pencil" />
-              <span>Edit</span>
+              <span>
+                <Trans>Edit</Trans>
+              </span>
             </MenuItem>
           )}
           {isSizeLarge && (
@@ -1169,9 +1305,14 @@ function Status({
               confirmLabel={
                 <>
                   <Icon icon="trash" />
-                  <span>Delete this post?</span>
+                  <span>
+                    <Trans>Delete this post?</Trans>
+                  </span>
                 </>
               }
+              itemProps={{
+                className: 'danger',
+              }}
               menuItemClassName="danger"
               onClick={() => {
                 // const yes = confirm('Delete this post?');
@@ -1181,17 +1322,19 @@ function Status({
                     await masto.v1.statuses.$select(id).remove();
                     const cachedStatus = getStatus(id, instance);
                     cachedStatus._deleted = true;
-                    showToast('Deleted');
+                    showToast(t`Post deleted`);
                   } catch (e) {
                     console.error(e);
-                    showToast('Unable to delete');
+                    showToast(t`Unable to delete post`);
                   }
                 })();
                 // }
               }}
             >
               <Icon icon="trash" />
-              <span>Delete…</span>
+              <span>
+                <Trans>Delete…</Trans>
+              </span>
             </MenuConfirm>
           )}
         </div>
@@ -1209,7 +1352,9 @@ function Status({
             }}
           >
             <Icon icon="flag" />
-            <span>Report post…</span>
+            <span>
+              <Trans>Report post…</Trans>
+            </span>
           </MenuItem>
         </>
       )}
@@ -1278,8 +1423,8 @@ function Status({
           if (!isSizeLarge && done) {
             showToast(
               reblogged
-                ? `Unboosted @${username || acct}'s post`
-                : `Boosted @${username || acct}'s post`,
+                ? t`Unboosted @${username || acct}'s post`
+                : t`Boosted @${username || acct}'s post`,
             );
           }
         } catch (e) {}
@@ -1459,11 +1604,11 @@ function Status({
             node?.closest?.(
               '.timeline-item, .timeline-item-alt, .status-link, .status-focus',
             ) || node;
-          rRef.current = nodeRef;
-          fRef.current = nodeRef;
-          dRef.current = nodeRef;
-          bRef.current = nodeRef;
-          xRef.current = nodeRef;
+          rRef(nodeRef);
+          fRef(nodeRef);
+          dRef(nodeRef);
+          bRef(nodeRef);
+          xRef(nodeRef);
         }}
         tabindex="-1"
         class={`status ${
@@ -1553,8 +1698,8 @@ function Status({
             >
               <StatusButton
                 size="s"
-                title="Reply"
-                alt="Reply"
+                title={t`Reply`}
+                alt={t`Reply`}
                 class="reply-button"
                 icon="comment"
                 iconSize="m"
@@ -1563,8 +1708,8 @@ function Status({
               <StatusButton
                 size="s"
                 checked={favourited}
-                title={['Like', 'Unlike']}
-                alt={['Like', 'Liked']}
+                title={[t`Like`, t`Unlike`]}
+                alt={[t`Like`, t`Liked`]}
                 class="favourite-button"
                 icon="heart"
                 iconSize="m"
@@ -1573,7 +1718,7 @@ function Status({
               />
               <button
                 type="button"
-                title="More"
+                title={t`More`}
                 class="plain more-button"
                 onClick={(e) => {
                   e.preventDefault();
@@ -1590,16 +1735,29 @@ function Status({
                   setIsContextMenuOpen('actions-bar');
                 }}
               >
-                <Icon icon="more2" size="m" alt="More" />
+                <Icon icon="more2" size="m" alt={t`More`} />
               </button>
             </div>
           )}
         {size !== 'l' && (
           <div class="status-badge">
-            {reblogged && <Icon class="reblog" icon="rocket" size="s" />}
-            {favourited && <Icon class="favourite" icon="heart" size="s" />}
-            {bookmarked && <Icon class="bookmark" icon="bookmark" size="s" />}
-            {_pinned && <Icon class="pin" icon="pin" size="s" />}
+            {reblogged && (
+              <Icon class="reblog" icon="rocket" size="s" alt={t`Boosted`} />
+            )}
+            {favourited && (
+              <Icon class="favourite" icon="heart" size="s" alt={t`Liked`} />
+            )}
+            {bookmarked && (
+              <Icon
+                class="bookmark"
+                icon="bookmark"
+                size="s"
+                alt={t`Bookmarked`}
+              />
+            )}
+            {_pinned && (
+              <Icon class="pin" icon="pin" size="s" alt={t`Pinned`} />
+            )}
           </div>
         )}
         {size !== 's' && (
@@ -1642,7 +1800,9 @@ function Status({
             {/* </span> */}{' '}
             {size !== 'l' &&
               (_deleted ? (
-                <span class="status-deleted-tag">Deleted</span>
+                <span class="status-deleted-tag">
+                  <Trans>Deleted</Trans>
+                </span>
               ) : url && !previewMode && !readOnly && !quoted ? (
                 <Link
                   to={instance ? `/${instance}/s/${id}` : `/s/${id}`}
@@ -1679,23 +1839,27 @@ function Status({
                     <Icon
                       icon="comment2"
                       size="s"
-                      alt={`${repliesCount} ${
-                        repliesCount === 1 ? 'reply' : 'replies'
-                      }`}
+                      // alt={`${repliesCount} ${
+                      //   repliesCount === 1 ? 'reply' : 'replies'
+                      // }`}
+                      alt={plural(repliesCount, {
+                        one: '# reply',
+                        other: '# replies',
+                      })}
                     />
                   ) : (
                     visibility !== 'public' &&
                     visibility !== 'direct' && (
                       <Icon
                         icon={visibilityIconsMap[visibility]}
-                        alt={visibilityText[visibility]}
+                        alt={_(visibilityText[visibility])}
                         size="s"
                       />
                     )
                   )}{' '}
                   <RelativeTime datetime={createdAtDate} format="micro" />
                   {!previewMode && !readOnly && (
-                    <Icon icon="more2" class="more" />
+                    <Icon icon="more2" class="more" alt={t`More`} />
                   )}
                 </Link>
               ) : (
@@ -1746,7 +1910,7 @@ function Status({
                     <>
                       <Icon
                         icon={visibilityIconsMap[visibility]}
-                        alt={visibilityText[visibility]}
+                        alt={_(visibilityText[visibility])}
                         size="s"
                       />{' '}
                     </>
@@ -1757,7 +1921,9 @@ function Status({
           </div>
           {visibility === 'direct' && (
             <>
-              <div class="status-direct-badge">Private mention</div>{' '}
+              <div class="status-direct-badge">
+                <Trans>Private mention</Trans>
+              </div>{' '}
             </>
           )}
           {!withinContext && (
@@ -1765,10 +1931,12 @@ function Status({
               {isThread ? (
                 <div class="status-thread-badge">
                   <Icon icon="thread" size="s" />
-                  Thread
-                  {snapStates.statusThreadNumber[sKey]
-                    ? ` ${snapStates.statusThreadNumber[sKey]}/X`
-                    : ''}
+                  <Trans>
+                    Thread
+                    {snapStates.statusThreadNumber[sKey]
+                      ? ` ${snapStates.statusThreadNumber[sKey]}/X`
+                      : ''}
+                  </Trans>
                 </div>
               ) : (
                 !!inReplyToId &&
@@ -1812,7 +1980,7 @@ function Status({
                         lang={language}
                         dir="auto"
                         ref={spoilerContentRef}
-                        data-read-more={readMoreText}
+                        data-read-more={_(readMoreText)}
                       >
                         <EmojiText text={spoilerText} emojis={emojis} />{' '}
                       </span>
@@ -1839,7 +2007,7 @@ function Status({
                       }}
                     >
                       <Icon icon={showSpoiler ? 'eye-open' : 'eye-close'} />{' '}
-                      {showSpoiler ? 'Show less' : 'Show content'}
+                      {showSpoiler ? t`Show less` : t`Show content`}
                     </button>
                   </>
                 )}
@@ -1868,7 +2036,7 @@ function Status({
                       lang={language}
                       dir="auto"
                       ref={spoilerContentRef}
-                      data-read-more={readMoreText}
+                      data-read-more={_(readMoreText)}
                     >
                       <p>
                         <EmojiText text={spoilerText} emojis={emojis} />
@@ -1876,7 +2044,7 @@ function Status({
                     </div>
                     {readingExpandSpoilers || previewMode ? (
                       <div class="spoiler-divider">
-                        <Icon icon="eye-open" /> Content warning
+                        <Icon icon="eye-open" /> <Trans>Content warning</Trans>
                       </div>
                     ) : (
                       <button
@@ -1901,7 +2069,7 @@ function Status({
                         }}
                       >
                         <Icon icon={showSpoiler ? 'eye-open' : 'eye-close'} />{' '}
-                        {showSpoiler ? 'Show less' : 'Show content'}
+                        {showSpoiler ? t`Show less` : t`Show content`}
                       </button>
                     )}
                   </>
@@ -1910,7 +2078,8 @@ function Status({
                   <div
                     class="content"
                     ref={contentRef}
-                    data-read-more={readMoreText}
+                    data-read-more={_(readMoreText)}
+                    inert={!!spoilerText && !showSpoiler ? true : undefined}
                   >
                     <PostContent
                       post={status}
@@ -1951,8 +2120,7 @@ function Status({
                   />
                 )}
                 {(((enableTranslate || inlineTranslate) &&
-                  !!content.trim() &&
-                  !!getHTMLText(emojifyText(content, emojis)) &&
+                  isTranslateble(content) &&
                   differentLanguage) ||
                   forceTranslate) && (
                   <TranslationBlock
@@ -1986,7 +2154,7 @@ function Status({
                       <Icon
                         icon={showSpoilerMedia ? 'eye-open' : 'eye-close'}
                       />{' '}
-                      {showSpoilerMedia ? 'Show less' : 'Show media'}
+                      {showSpoilerMedia ? t`Show less` : t`Show media`}
                     </button>
                   )}
                 {!!mediaAttachments.length &&
@@ -2069,6 +2237,9 @@ function Status({
                       selfReferential={
                         card?.url === status.url || card?.url === status.uri
                       }
+                      selfAuthor={card?.authors?.some(
+                        (a) => a.account?.url === accountURL,
+                      )}
                       instance={currentInstance}
                     />
                   )}
@@ -2077,21 +2248,23 @@ function Status({
           </div>
           {!isSizeLarge && showCommentCount && (
             <div class="content-comment-hint insignificant">
-              <Icon icon="comment2" alt="Replies" /> {repliesCount}
+              <Icon icon="comment2" alt={t`Replies`} /> {repliesCount}
             </div>
           )}
           {isSizeLarge && (
             <>
               <div class="extra-meta">
                 {_deleted ? (
-                  <span class="status-deleted-tag">Deleted</span>
+                  <span class="status-deleted-tag">
+                    <Trans>Deleted</Trans>
+                  </span>
                 ) : (
                   <>
                     {/* <Icon
                       icon={visibilityIconsMap[visibility]}
                       alt={visibilityText[visibility]}
                     /> */}
-                    <span>{visibilityText[visibility]}</span> &bull;{' '}
+                    <span>{_(visibilityText[visibility])}</span> &bull;{' '}
                     <a href={url} target="_blank" rel="noopener noreferrer">
                       <time
                         class="created"
@@ -2104,7 +2277,7 @@ function Status({
                     {editedAt && (
                       <>
                         {' '}
-                        &bull; <Icon icon="pencil" alt="Edited" />{' '}
+                        &bull; <Icon icon="pencil" alt={t`Edited`} />{' '}
                         <time
                           tabIndex="0"
                           class="edited"
@@ -2180,8 +2353,8 @@ function Status({
               <div class={`actions ${_deleted ? 'disabled' : ''}`}>
                 <div class="action has-count">
                   <StatusButton
-                    title="Reply"
-                    alt="Comments"
+                    title={t`Reply`}
+                    alt={t`Comments`}
                     class="reply-button"
                     icon="comment"
                     count={repliesCount}
@@ -2206,7 +2379,7 @@ function Status({
                   confirmLabel={
                     <>
                       <Icon icon="rocket" />
-                      <span>{reblogged ? 'Unboost' : 'Boost'}</span>
+                      <span>{reblogged ? t`Unboost` : t`Boost`}</span>
                     </>
                   }
                   menuExtras={
@@ -2220,7 +2393,9 @@ function Status({
                       }}
                     >
                       <Icon icon="quote" />
-                      <span>Quote</span>
+                      <span>
+                        <Trans>Quote</Trans>
+                      </span>
                     </MenuItem>
                   }
                   menuFooter={
@@ -2228,7 +2403,7 @@ function Status({
                     !reblogged && (
                       <div class="footer">
                         <Icon icon="alert" />
-                        Some media have no descriptions.
+                        <Trans>Some media have no descriptions.</Trans>
                       </div>
                     )
                   }
@@ -2236,8 +2411,8 @@ function Status({
                   <div class="action has-count">
                     <StatusButton
                       checked={reblogged}
-                      title={['Boost', 'Unboost']}
-                      alt={['Boost', 'Boosted']}
+                      title={[t`Boost`, t`Unboost`]}
+                      alt={[t`Boost`, t`Boosted`]}
                       class="reblog-button"
                       icon="rocket"
                       count={reblogsCount}
@@ -2249,8 +2424,8 @@ function Status({
                 <div class="action has-count">
                   <StatusButton
                     checked={favourited}
-                    title={['Like', 'Unlike']}
-                    alt={['Like', 'Liked']}
+                    title={[t`Like`, t`Unlike`]}
+                    alt={[t`Like`, t`Liked`]}
                     class="favourite-button"
                     icon="heart"
                     count={favouritesCount}
@@ -2261,8 +2436,8 @@ function Status({
                   <div class="action">
                     <StatusButton
                       checked={bookmarked}
-                      title={['Bookmark', 'Unbookmark']}
-                      alt={['Bookmark', 'Bookmarked']}
+                      title={[t`Bookmark`, t`Unbookmark`]}
+                      alt={[t`Bookmark`, t`Bookmarked`]}
                       class="bookmark-button"
                       icon="bookmark"
                       onClick={bookmarkStatus}
@@ -2282,10 +2457,10 @@ function Status({
                     <div class="action">
                       <button
                         type="button"
-                        title="More"
+                        title={t`More`}
                         class="plain more-button"
                       >
-                        <Icon icon="more" size="l" alt="More" />
+                        <Icon icon="more" size="l" alt={t`More`} />
                       </button>
                     </div>
                   }
@@ -2477,7 +2652,27 @@ function isCardPost(domain) {
   return ['x.com', 'twitter.com', 'threads.net', 'bsky.app'].includes(domain);
 }
 
-function Card({ card, selfReferential, instance }) {
+function Byline({ authors, hidden, children }) {
+  if (hidden) return children;
+  if (!authors?.[0]?.account?.id) return children;
+  const author = authors[0].account;
+
+  return (
+    <div class="card-byline">
+      {children}
+      <div class="card-byline-author">
+        <Icon icon="link" size="s" />{' '}
+        <small>
+          <Trans comment="More from [Author]">
+            More from <NameText account={author} showAvatar />
+          </Trans>
+        </small>
+      </div>
+    </div>
+  );
+}
+
+function Card({ card, selfReferential, selfAuthor, instance }) {
   const snapStates = useSnapshot(states);
   const {
     blurhash,
@@ -2497,6 +2692,7 @@ function Card({ card, selfReferential, instance }) {
     embedUrl,
     language,
     publishedAt,
+    authors,
   } = card;
 
   /* type
@@ -2554,9 +2750,9 @@ function Card({ card, selfReferential, instance }) {
     [hasIframeHTML],
   );
 
+  const [blurhashImage, setBlurhashImage] = useState(null);
   if (hasText && (image || (type === 'photo' && blurhash))) {
     const domain = getDomain(url);
-    let blurhashImage;
     const rgbAverageColor =
       image && blurhash ? getBlurHashAverageColor(blurhash) : null;
     if (!image) {
@@ -2573,66 +2769,84 @@ function Card({ card, selfReferential, instance }) {
       const imageData = ctx.createImageData(w, h);
       imageData.data.set(blurhashPixels);
       ctx.putImageData(imageData, 0, 0);
-      blurhashImage = canvas.toDataURL();
+      try {
+        if (window.OffscreenCanvas) {
+          canvas.convertToBlob().then((blob) => {
+            setBlurhashImage(URL.createObjectURL(blob));
+          });
+        } else {
+          setBlurhashImage(canvas.toDataURL());
+        }
+      } catch (e) {
+        // Silently fail
+        console.error(e);
+      }
     }
 
     const isPost = isCardPost(domain);
 
     return (
-      <a
-        href={cardStatusURL || url}
-        target={cardStatusURL ? null : '_blank'}
-        rel="nofollow noopener noreferrer"
-        class={`card link ${isPost ? 'card-post' : ''} ${
-          blurhashImage ? '' : size
-        }`}
-        style={{
-          '--average-color':
-            rgbAverageColor && `rgb(${rgbAverageColor.join(',')})`,
-        }}
-        onClick={handleClick}
-      >
-        <div class="card-image">
-          <img
-            src={image || blurhashImage}
-            width={width}
-            height={height}
-            loading="lazy"
-            alt={imageDescription || ''}
-            onError={(e) => {
-              try {
-                e.target.style.display = 'none';
-              } catch (e) {}
-            }}
-            style={{
-              '--anim-duration':
-                width &&
-                height &&
-                `${Math.min(Math.max(Math.max(width, height) / 100, 5), 120)}s`,
-            }}
-          />
-        </div>
-        <div class="meta-container" lang={language}>
-          <p class="meta domain">
-            <span class="domain">{domain}</span>{' '}
-            {!!publishedAt && <>&middot; </>}
-            {!!publishedAt && (
-              <>
-                <RelativeTime datetime={publishedAt} format="micro" />
-              </>
-            )}
-          </p>
-          <p class="title" dir="auto" title={title}>
-            {title}
-          </p>
-          <p class="meta" dir="auto" title={description}>
-            {description ||
-              (!!publishedAt && (
-                <RelativeTime datetime={publishedAt} format="micro" />
-              ))}
-          </p>
-        </div>
-      </a>
+      <Byline hidden={!!selfAuthor} authors={authors}>
+        <a
+          href={cardStatusURL || url}
+          target={cardStatusURL ? null : '_blank'}
+          rel="nofollow noopener noreferrer"
+          class={`card link ${isPost ? 'card-post' : ''} ${
+            blurhashImage ? '' : size
+          }`}
+          style={{
+            '--average-color':
+              rgbAverageColor && `rgb(${rgbAverageColor.join(',')})`,
+          }}
+          onClick={handleClick}
+        >
+          <div class="card-image">
+            <img
+              src={image || blurhashImage}
+              width={width}
+              height={height}
+              loading="lazy"
+              decoding="async"
+              fetchPriority="low"
+              alt={imageDescription || ''}
+              onError={(e) => {
+                try {
+                  e.target.style.display = 'none';
+                } catch (e) {}
+              }}
+              style={{
+                '--anim-duration':
+                  width &&
+                  height &&
+                  `${Math.min(
+                    Math.max(Math.max(width, height) / 100, 5),
+                    120,
+                  )}s`,
+              }}
+            />
+          </div>
+          <div class="meta-container" lang={language}>
+            <p class="meta domain">
+              <span class="domain">{domain}</span>{' '}
+              {!!publishedAt && <>&middot; </>}
+              {!!publishedAt && (
+                <>
+                  <RelativeTime datetime={publishedAt} format="micro" />
+                </>
+              )}
+            </p>
+            <p class="title" dir="auto" title={title}>
+              {title}
+            </p>
+            <p class="meta" dir="auto" title={description}>
+              {description ||
+                (!!publishedAt && (
+                  <RelativeTime datetime={publishedAt} format="micro" />
+                ))}
+            </p>
+          </div>
+        </a>
+      </Byline>
     );
   } else if (type === 'photo') {
     return (
@@ -2745,15 +2959,21 @@ function EditedAtModal({
     <div id="edit-history" class="sheet">
       {!!onClose && (
         <button type="button" class="sheet-close" onClick={onClose}>
-          <Icon icon="x" />
+          <Icon icon="x" alt={t`Close`} />
         </button>
       )}
       <header>
-        <h2>Edit History</h2>
-        {uiState === 'error' && <p>Failed to load history</p>}
+        <h2>
+          <Trans>Edit History</Trans>
+        </h2>
+        {uiState === 'error' && (
+          <p>
+            <Trans>Failed to load history</Trans>
+          </p>
+        )}
         {uiState === 'loading' && (
           <p>
-            <Loader abrupt /> Loading&hellip;
+            <Loader abrupt /> <Trans>Loading…</Trans>
           </p>
         )}
       </header>
@@ -2928,7 +3148,7 @@ function generateHTMLCode(post, instance, level = 0) {
       : '');
 
   const htmlCode = `
-    <blockquote lang="${language}" cite="${url}">
+    <blockquote lang="${language}" cite="${url}" data-source="fediverse">
       ${
         spoilerText
           ? `
@@ -2978,14 +3198,18 @@ function EmbedModal({ post, instance, onClose }) {
     <div id="embed-post" class="sheet">
       {!!onClose && (
         <button type="button" class="sheet-close" onClick={onClose}>
-          <Icon icon="x" />
+          <Icon icon="x" alt={t`Close`} />
         </button>
       )}
       <header>
-        <h2>Embed post</h2>
+        <h2>
+          <Trans>Embed post</Trans>
+        </h2>
       </header>
       <main tabIndex="-1">
-        <h3>HTML Code</h3>
+        <h3>
+          <Trans>HTML Code</Trans>
+        </h3>
         <textarea
           class="embed-code"
           readonly
@@ -3001,18 +3225,23 @@ function EmbedModal({ post, instance, onClose }) {
           onClick={() => {
             try {
               navigator.clipboard.writeText(htmlCode);
-              showToast('HTML code copied');
+              showToast(t`HTML code copied`);
             } catch (e) {
               console.error(e);
-              showToast('Unable to copy HTML code');
+              showToast(t`Unable to copy HTML code`);
             }
           }}
         >
-          <Icon icon="clipboard" /> <span>Copy</span>
+          <Icon icon="clipboard" />{' '}
+          <span>
+            <Trans>Copy</Trans>
+          </span>
         </button>
         {!!mediaAttachments?.length && (
           <section>
-            <p>Media attachments:</p>
+            <p>
+              <Trans>Media attachments:</Trans>
+            </p>
             <ol class="links-list">
               {mediaAttachments.map((media) => {
                 return (
@@ -3032,7 +3261,9 @@ function EmbedModal({ post, instance, onClose }) {
         )}
         {!!accountEmojis?.length && (
           <section>
-            <p>Account Emojis:</p>
+            <p>
+              <Trans>Account Emojis:</Trans>
+            </p>
             <ul>
               {accountEmojis.map((emoji) => {
                 return (
@@ -3054,7 +3285,7 @@ function EmbedModal({ post, instance, onClose }) {
                     </picture>{' '}
                     <code>:{emoji.shortcode}:</code> (
                     <a href={emoji.url} target="_blank" download>
-                      url
+                      URL
                     </a>
                     )
                     {emoji.staticUrl ? (
@@ -3062,7 +3293,7 @@ function EmbedModal({ post, instance, onClose }) {
                         {' '}
                         (
                         <a href={emoji.staticUrl} target="_blank" download>
-                          static
+                          <Trans>static URL</Trans>
                         </a>
                         )
                       </>
@@ -3075,7 +3306,9 @@ function EmbedModal({ post, instance, onClose }) {
         )}
         {!!emojis?.length && (
           <section>
-            <p>Emojis:</p>
+            <p>
+              <Trans>Emojis:</Trans>
+            </p>
             <ul>
               {emojis.map((emoji) => {
                 return (
@@ -3097,7 +3330,7 @@ function EmbedModal({ post, instance, onClose }) {
                     </picture>{' '}
                     <code>:{emoji.shortcode}:</code> (
                     <a href={emoji.url} target="_blank" download>
-                      url
+                      URL
                     </a>
                     )
                     {emoji.staticUrl ? (
@@ -3105,7 +3338,7 @@ function EmbedModal({ post, instance, onClose }) {
                         {' '}
                         (
                         <a href={emoji.staticUrl} target="_blank" download>
-                          static
+                          <Trans>static URL</Trans>
                         </a>
                         )
                       </>
@@ -3118,31 +3351,45 @@ function EmbedModal({ post, instance, onClose }) {
         )}
         <section>
           <small>
-            <p>Notes:</p>
+            <p>
+              <Trans>Notes:</Trans>
+            </p>
             <ul>
               <li>
-                This is static, unstyled and scriptless. You may need to apply
-                your own styles and edit as needed.
+                <Trans>
+                  This is static, unstyled and scriptless. You may need to apply
+                  your own styles and edit as needed.
+                </Trans>
               </li>
               <li>
-                Polls are not interactive, becomes a list with vote counts.
+                <Trans>
+                  Polls are not interactive, becomes a list with vote counts.
+                </Trans>
               </li>
               <li>
-                Media attachments can be images, videos, audios or any file
-                types.
+                <Trans>
+                  Media attachments can be images, videos, audios or any file
+                  types.
+                </Trans>
               </li>
-              <li>Post could be edited or deleted later.</li>
+              <li>
+                <Trans>Post could be edited or deleted later.</Trans>
+              </li>
             </ul>
           </small>
         </section>
-        <h3>Preview</h3>
+        <h3>
+          <Trans>Preview</Trans>
+        </h3>
         <output
           class="embed-preview"
           dangerouslySetInnerHTML={{ __html: htmlCode }}
           dir="auto"
         />
         <p>
-          <small>Note: This preview is lightly styled.</small>
+          <small>
+            <Trans>Note: This preview is lightly styled.</Trans>
+          </small>
         </p>
       </main>
     </div>
@@ -3278,7 +3525,9 @@ function StatusCompact({ sKey }) {
       >
         {filterInfo ? (
           <b class="status-filtered-badge badge-meta" title={filterTitleStr}>
-            <span>Filtered</span>
+            <span>
+              <Trans>Filtered</Trans>
+            </span>
             <span>{filterTitleStr}</span>
           </b>
         ) : (
@@ -3297,6 +3546,7 @@ function FilteredStatus({
   showFollowedTags,
   quoted,
 }) {
+  const { _ } = useLingui();
   const snapStates = useSnapshot(states);
   const {
     id: statusID,
@@ -3371,30 +3621,52 @@ function FilteredStatus({
             setShowPeek(true);
           }}
         >
-          <span>Filtered</span>
+          <span>
+            <Trans>Filtered</Trans>
+          </span>
           <span>{filterTitleStr}</span>
         </b>{' '}
         <Avatar url={avatarStatic || avatar} squircle={bot} />
         <span class="status-filtered-info">
           <span class="status-filtered-info-1">
-            <NameText account={status.account} instance={instance} />{' '}
-            <Icon
-              icon={visibilityIconsMap[visibility]}
-              alt={visibilityText[visibility]}
-              size="s"
-            />{' '}
             {isReblog ? (
-              'boosted'
+              <Trans comment="[Name] [Visibility icon] boosted">
+                <NameText account={status.account} instance={instance} />{' '}
+                <Icon
+                  icon={visibilityIconsMap[visibility]}
+                  alt={_(visibilityText[visibility])}
+                  size="s"
+                />{' '}
+                boosted
+              </Trans>
             ) : isFollowedTags ? (
-              <span>
-                {snapStates.statusFollowedTags[sKey].slice(0, 3).map((tag) => (
-                  <span key={tag} class="status-followed-tag-item">
-                    #{tag}
-                  </span>
-                ))}
-              </span>
+              <>
+                <NameText account={status.account} instance={instance} />{' '}
+                <Icon
+                  icon={visibilityIconsMap[visibility]}
+                  alt={_(visibilityText[visibility])}
+                  size="s"
+                />{' '}
+                <span>
+                  {snapStates.statusFollowedTags[sKey]
+                    .slice(0, 3)
+                    .map((tag) => (
+                      <span key={tag} class="status-followed-tag-item">
+                        #{tag}
+                      </span>
+                    ))}
+                </span>
+              </>
             ) : (
-              <RelativeTime datetime={createdAtDate} format="micro" />
+              <>
+                <NameText account={status.account} instance={instance} />{' '}
+                <Icon
+                  icon={visibilityIconsMap[visibility]}
+                  alt={_(visibilityText[visibility])}
+                  size="s"
+                />{' '}
+                <RelativeTime datetime={createdAtDate} format="micro" />
+              </>
             )}
           </span>
           <span class="status-filtered-info-2">
@@ -3424,10 +3696,13 @@ function FilteredStatus({
               class="sheet-close"
               onClick={() => setShowPeek(false)}
             >
-              <Icon icon="x" />
+              <Icon icon="x" alt={t`Close`} />
             </button>
             <header>
-              <b class="status-filtered-badge">Filtered</b> {filterTitleStr}
+              <b class="status-filtered-badge">
+                <Trans>Filtered</Trans>
+              </b>{' '}
+              {filterTitleStr}
             </header>
             <main tabIndex="-1">
               <Link
@@ -3437,7 +3712,7 @@ function FilteredStatus({
                 onClick={() => {
                   setShowPeek(false);
                 }}
-                data-read-more="Read more →"
+                data-read-more={_(readMoreText)}
               >
                 <Status status={status} instance={instance} size="s" readOnly />
               </Link>
@@ -3451,6 +3726,7 @@ function FilteredStatus({
 
 const QuoteStatuses = memo(({ id, instance, level = 0 }) => {
   if (!id || !instance) return;
+  const { _ } = useLingui();
   const snapStates = useSnapshot(states);
   const sKey = statusKey(id, instance);
   const quotes = snapStates.statusQuotes[sKey];
@@ -3468,7 +3744,7 @@ const QuoteStatuses = memo(({ id, instance, level = 0 }) => {
           key={q.instance + q.id}
           to={`${q.instance ? `/${q.instance}` : ''}/s/${q.id}`}
           class="status-card-link"
-          data-read-more="Read more →"
+          data-read-more={_(readMoreText)}
         >
           <Status
             statusID={q.id}

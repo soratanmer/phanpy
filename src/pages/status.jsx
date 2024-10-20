@@ -1,5 +1,6 @@
 import './status.css';
 
+import { Plural, t, Trans } from '@lingui/macro';
 import { Menu, MenuDivider, MenuHeader, MenuItem } from '@szhsin/react-menu';
 import debounce from 'just-debounce-it';
 import pRetry from 'p-retry';
@@ -42,6 +43,8 @@ import useScroll from '../utils/useScroll';
 import useTitle from '../utils/useTitle';
 
 import getInstanceStatusURL from './../utils/get-instance-status-url';
+
+const { PHANPY_DEFAULT_INSTANCE: DEFAULT_INSTANCE } = import.meta.env;
 
 const LIMIT = 40;
 const SUBCOMMENTS_OPEN_ALL_LIMIT = 10;
@@ -561,7 +564,10 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
   useTitle(
     heroDisplayName && heroContentText
       ? `${heroDisplayName}: "${heroContentText}"`
-      : 'Status',
+      : t({
+          id: 'post.title',
+          message: 'Post',
+        }),
     '/:instance?/s/:id',
   );
 
@@ -782,19 +788,30 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
               {uiState !== 'loading' && !authenticated ? (
                 <div class="post-status-banner">
                   <p>
-                    You're not logged in. Interactions (reply, boost, etc) are
-                    not possible.
+                    <Trans>
+                      You're not logged in. Interactions (reply, boost, etc) are
+                      not possible.
+                    </Trans>
                   </p>
-                  <Link to="/login" class="button">
-                    Log in
+                  <Link
+                    to={
+                      DEFAULT_INSTANCE
+                        ? `/login?instance=${DEFAULT_INSTANCE}&submit=1`
+                        : '/login'
+                    }
+                    class="button"
+                  >
+                    <Trans>Log in</Trans>
                   </Link>
                 </div>
               ) : (
                 !sameInstance && (
                   <div class="post-status-banner">
                     <p>
-                      This post is from another instance (<b>{instance}</b>).
-                      Interactions (reply, boost, etc) are not possible.
+                      <Trans>
+                        This post is from another instance (<b>{instance}</b>).
+                        Interactions (reply, boost, etc) are not possible.
+                      </Trans>
                     </p>
                     <button
                       type="button"
@@ -819,14 +836,16 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
                             }
                           } catch (e) {
                             setUIState('default');
-                            alert('Error: ' + e);
+                            alert(t`Error: ${e}`);
                             console.error(e);
                           }
                         })();
                       }}
                     >
-                      <Icon icon="transfer" /> Switch to my instance to enable
-                      interactions
+                      <Icon icon="transfer" />{' '}
+                      <Trans>
+                        Switch to my instance to enable interactions
+                      </Trans>
                     </button>
                   </div>
                 )
@@ -882,7 +901,7 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
               )}
               {ancestor && repliesCount > 1 && (
                 <div class="replies-link">
-                  <Icon icon="comment2" />{' '}
+                  <Icon icon="comment2" alt={t`Replies`} />{' '}
                   <span title={repliesCount}>
                     {shortenNumber(repliesCount)}
                   </span>
@@ -926,7 +945,7 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
             !!heroStatus?.repliesCount &&
             !hasDescendants && (
               <div class="status-error">
-                Unable to load replies.
+                <Trans>Unable to load replies.</Trans>
                 <br />
                 <button
                   type="button"
@@ -935,7 +954,7 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
                     states.reloadStatusPage++;
                   }}
                 >
-                  Try again
+                  <Trans>Try again</Trans>
                 </button>
               </div>
             )}
@@ -1038,7 +1057,7 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
                   history.back();
                 }}
               >
-                <Icon icon="chevron-left" size="xl" />
+                <Icon icon="chevron-left" size="xl" alt={t`Back`} />
               </button>
             )}
             {!heroInView && heroStatus && uiState !== 'loading' ? (
@@ -1069,7 +1088,7 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
                       block: 'start',
                     });
                   }}
-                  title="Go to main post"
+                  title={t`Go to main post`}
                 >
                   <Icon
                     icon={heroPointer === 'down' ? 'arrow-down' : 'arrow-up'}
@@ -1078,7 +1097,7 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
               </>
             ) : (
               <>
-                Post{' '}
+                <Trans id="post.title">Post</Trans>{' '}
                 <button
                   type="button"
                   class="ancestors-indicator light small"
@@ -1092,7 +1111,7 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
                     });
                   }}
                   hidden={!ancestors.length || reachTopPost}
-                  title={`${ancestors.length} posts above ‒ Go to top`}
+                  title={t`${ancestors.length} posts above ‒ Go to top`}
                 >
                   <Icon icon="arrow-up" />
                   {ancestors
@@ -1135,7 +1154,7 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
                 searchParams.delete('view');
                 setSearchParams(searchParams);
               }}
-              title="Switch to Side Peek view"
+              title={t`Switch to Side Peek view`}
             >
               <Icon icon="layout4" size="l" />
             </button>
@@ -1148,7 +1167,7 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
                   setShowRefresh(false);
                 }}
               >
-                <Icon icon="refresh" size="l" />
+                <Icon icon="refresh" size="l" alt={t`Refresh`} />
               </button>
             )}
             <Menu2
@@ -1159,7 +1178,7 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
               }}
               menuButton={
                 <button type="button" class="button plain4">
-                  <Icon icon="more" alt="Actions" size="xl" />
+                  <Icon icon="more" alt={t`More`} size="xl" />
                 </button>
               }
             >
@@ -1170,7 +1189,9 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
                 }}
               >
                 <Icon icon="refresh" />
-                <span>Refresh</span>
+                <span>
+                  <Trans>Refresh</Trans>
+                </span>
               </MenuItem>
               <MenuItem
                 className="menu-switch-view"
@@ -1195,7 +1216,9 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
                   }
                 />
                 <span>
-                  Switch to {viewMode === 'full' ? 'Side Peek' : 'Full'} view
+                  {viewMode === 'full'
+                    ? t`Switch to Side Peek view`
+                    : t`Switch to Full view`}
                 </span>
               </MenuItem>
               <MenuItem
@@ -1211,10 +1234,15 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
                   });
                 }}
               >
-                <Icon icon="eye-open" /> <span>Show all sensitive content</span>
+                <Icon icon="eye-open" />{' '}
+                <span>
+                  <Trans>Show all sensitive content</Trans>
+                </span>
               </MenuItem>
               <MenuDivider />
-              <MenuHeader className="plain">Experimental</MenuHeader>
+              <MenuHeader className="plain">
+                <Trans>Experimental</Trans>
+              </MenuHeader>
               <MenuItem
                 disabled={!postInstance || postSameInstance}
                 onClick={() => {
@@ -1222,26 +1250,22 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
                   if (statusURL) {
                     location.hash = statusURL;
                   } else {
-                    alert('Unable to switch');
+                    alert(t`Unable to switch`);
                   }
                 }}
               >
                 <Icon icon="transfer" />
                 <small class="menu-double-lines">
-                  Switch to post's instance
-                  {postInstance ? (
-                    <>
-                      {' '}
-                      (<b>{punycode.toUnicode(postInstance)}</b>)
-                    </>
-                  ) : (
-                    ''
-                  )}
+                  {postInstance
+                    ? t`Switch to post's instance (${punycode.toUnicode(
+                        postInstance,
+                      )})`
+                    : t`Switch to post's instance`}
                 </small>
               </MenuItem>
             </Menu2>
             <Link class="button plain deck-close" to={closeLink}>
-              <Icon icon="x" size="xl" />
+              <Icon icon="x" size="xl" alt={t`Close`} />
             </Link>
           </div>
         </div>
@@ -1274,7 +1298,7 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
                   ))}
                 </div>{' '}
                 <div class="ib">
-                  Show more&hellip;{' '}
+                  <Trans>Show more…</Trans>{' '}
                   <span class="tag">
                     {showMore > LIMIT ? `${LIMIT}+` : showMore}
                   </span>
@@ -1294,7 +1318,7 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
           )}
           {uiState === 'error' && (
             <p class="ui-state">
-              Unable to load post
+              <Trans>Unable to load post</Trans>
               <br />
               <br />
               <button
@@ -1303,7 +1327,7 @@ function StatusThread({ id, closeLink = '/', instance: propInstance }) {
                   states.reloadStatusPage++;
                 }}
               >
-                Try again
+                <Trans>Try again</Trans>
               </button>
             </p>
           )}
@@ -1411,20 +1435,36 @@ function SubComments({
         </span>
         <span class="replies-counts">
           <b>
-            <span title={replies.length}>{shortenNumber(replies.length)}</span>{' '}
-            repl
-            {replies.length === 1 ? 'y' : 'ies'}
+            <Plural
+              value={replies.length}
+              one="# reply"
+              other={
+                <Trans>
+                  <span title={replies.length}>
+                    {shortenNumber(replies.length)}
+                  </span>{' '}
+                  replies
+                </Trans>
+              }
+            />
           </b>
           {!sameCount && totalComments > 1 && (
             <>
               {' '}
               &middot;{' '}
               <span>
-                <span title={totalComments}>
-                  {shortenNumber(totalComments)}
-                </span>{' '}
-                comment
-                {totalComments === 1 ? '' : 's'}
+                <Plural
+                  value={totalComments}
+                  one="# comment"
+                  other={
+                    <Trans>
+                      <span title={totalComments}>
+                        {shortenNumber(totalComments)}
+                      </span>{' '}
+                      comments
+                    </Trans>
+                  }
+                />
               </span>
             </>
           )}
@@ -1435,7 +1475,7 @@ function SubComments({
             class="replies-parent-link"
             to={parentLink.to}
             onClick={parentLink.onClick}
-            title="View post with its replies"
+            title={t`View post with its replies`}
           >
             &raquo;
           </Link>
@@ -1463,7 +1503,7 @@ function SubComments({
               />
               {!r.replies?.length && r.repliesCount > 0 && (
                 <div class="replies-link">
-                  <Icon icon="comment2" />{' '}
+                  <Icon icon="comment2" alt={t`Replies`} />{' '}
                   <span title={r.repliesCount}>
                     {shortenNumber(r.repliesCount)}
                   </span>
