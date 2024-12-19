@@ -247,8 +247,11 @@
   :is(.content.truncated, .poll, .media-container.truncated) {
   mask-image: linear-gradient(to bottom, #000 40px, transparent);
 }
-.status-card .card {
-  display: none;
+.status-card {
+  .card,
+  .card-byline {
+    display: none;
+  }
 }
 .timeline-deck .status-card .content.truncated:after {
   /* Don't show "Read more" in status cards */
@@ -430,6 +433,7 @@
 
     > span + span {
       position: static;
+      width: auto;
 
       &:empty {
         display: none;
@@ -598,6 +602,7 @@
   position: relative;
   top: calc((9px + 2px) / 2 * -1);
   min-width: 50px;
+  max-width: 100px;
   text-align: center;
 }
 .status-filtered-badge.clickable:hover {
@@ -607,6 +612,8 @@
   background: var(--bg-color);
 }
 .status-filtered-badge:not(.horizontal).badge-meta > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .status-filtered-badge:not(.horizontal).badge-meta > span + span {
@@ -1597,7 +1604,7 @@ body:has(#modal-container .carousel) .status .media img:hover {
     margin-top: 8px;
     padding: 8px;
 
-    @supports (animation-timeline: scroll()) {
+    @supports ((animation-timeline: scroll()) and (animation-range: 0% 100%)) {
       animation: media-carousel-slide 1s linear both;
       animation-timeline: --media-carousel;
     }
@@ -1892,6 +1899,7 @@ a:focus-visible .card img {
   .meta-container {
   align-self: flex-start;
   flex-grow: 0;
+  max-width: 100%;
 }
 .card .title {
   line-height: 1.25;
@@ -1984,6 +1992,24 @@ a.card:is(:hover, :focus):visited {
   .content-container[data-content-text-weight='1']
   .card.large.card-post {
   flex-direction: column-reverse;
+}
+.card-byline-author {
+  display: inline-flex;
+  gap: 4px;
+  color: var(--text-insignificant-color);
+  padding: 2px 8px;
+  align-items: flex-start;
+
+  .icon {
+    min-height: 1em;
+  }
+
+  .avatar {
+    width: 16px !important;
+    height: 16px !important;
+    opacity: 0.8;
+    vertical-align: middle;
+  }
 }
 
 /* POLLS */
@@ -2105,8 +2131,8 @@ a.card:is(:hover, :focus):visited {
   color: var(--text-insignificant-color);
   font-size: 90%;
 }
-.status .extra-meta * {
-  vertical-align: middle;
+.status .extra-meta .icon {
+  vertical-align: text-bottom;
 }
 .status .extra-meta a {
   color: inherit;
