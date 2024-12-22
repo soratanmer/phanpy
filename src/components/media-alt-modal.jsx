@@ -1,3 +1,4 @@
+import { Trans, useLingui } from '@lingui/react/macro';
 import { Menu, MenuItem } from '@szhsin/react-menu';
 import { useState } from 'preact/hooks';
 import { useSnapshot } from 'valtio';
@@ -12,6 +13,7 @@ import Menu2 from './menu2';
 import TranslationBlock from './translation-block';
 
 export default function MediaAltModal({ alt, lang, onClose }) {
+  const { t } = useLingui();
   const snapStates = useSnapshot(states);
   const [forceTranslate, setForceTranslate] = useState(false);
   const targetLanguage = getTranslateTargetLanguage(true);
@@ -29,17 +31,19 @@ export default function MediaAltModal({ alt, lang, onClose }) {
     <div class="sheet" tabindex="-1">
       {!!onClose && (
         <button type="button" class="sheet-close outer" onClick={onClose}>
-          <Icon icon="x" />
+          <Icon icon="x" alt={t`Close`} />
         </button>
       )}
       <header class="header-grid">
-        <h2>Media description</h2>
+        <h2>
+          <Trans>Media description</Trans>
+        </h2>
         <div class="header-side">
           <Menu2
             align="end"
             menuButton={
               <button type="button" class="plain4">
-                <Icon icon="more" alt="More" size="xl" />
+                <Icon icon="more" alt={t`More`} size="xl" />
               </button>
             }
           >
@@ -50,7 +54,9 @@ export default function MediaAltModal({ alt, lang, onClose }) {
               }}
             >
               <Icon icon="translate" />
-              <span>Translate</span>
+              <span>
+                <Trans>Translate</Trans>
+              </span>
             </MenuItem>
             {supportsTTS && (
               <MenuItem
@@ -59,7 +65,9 @@ export default function MediaAltModal({ alt, lang, onClose }) {
                 }}
               >
                 <Icon icon="speak" />
-                <span>Speak</span>
+                <span>
+                  <Trans>Speak</Trans>
+                </span>
               </MenuItem>
             )}
           </Menu2>

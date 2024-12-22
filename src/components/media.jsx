@@ -1,3 +1,4 @@
+import { useLingui } from '@lingui/react/macro';
 import { getBlurHashAverageColor } from 'fast-blurhash';
 import { Fragment } from 'preact';
 import { memo } from 'preact/compat';
@@ -31,6 +32,7 @@ audio = Audio track
 
 const dataAltLabel = 'ALT';
 const AltBadge = (props) => {
+  const { t } = useLingui();
   const { alt, lang, index, ...rest } = props;
   if (!alt || !alt.trim()) return null;
   return (
@@ -46,7 +48,7 @@ const AltBadge = (props) => {
           lang,
         };
       }}
-      title="Media description"
+      title={t`Media description`}
     >
       {dataAltLabel}
       {!!index && <sup>{index}</sup>}
@@ -73,6 +75,7 @@ function Media({
   showCaption,
   allowLongerCaption,
   altIndex,
+  checkAspectRatio = true,
   onClick = () => {},
 }) {
   let {
@@ -353,7 +356,7 @@ function Media({
                   }
 
                   // Check natural aspect ratio vs display aspect ratio
-                  if ($media) {
+                  if (checkAspectRatio && $media) {
                     const {
                       clientWidth,
                       clientHeight,
@@ -615,7 +618,7 @@ function Media({
                 />
               )}
               <div class="media-play">
-                <Icon icon="play" size="xl" />
+                <Icon icon="play" size="xl" alt="▶" />
               </div>
             </>
           )}
@@ -659,7 +662,7 @@ function Media({
           {!showOriginal && (
             <>
               <div class="media-play">
-                <Icon icon="play" size="xl" />
+                <Icon icon="play" size="xl" alt="▶" />
               </div>
               {!showInlineDesc && (
                 <AltBadge alt={description} lang={lang} index={altIndex} />
