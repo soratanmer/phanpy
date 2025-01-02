@@ -1,3 +1,4 @@
+import { useLingui } from '@lingui/react/macro';
 import { useEffect } from 'preact/hooks';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { subscribe, useSnapshot } from 'valtio';
@@ -29,6 +30,7 @@ subscribe(states, (changes) => {
 });
 
 export default function Modals() {
+  const { t } = useLingui();
   const snapStates = useSnapshot(states);
   const navigate = useNavigate();
   const location = useLocation();
@@ -68,9 +70,9 @@ export default function Modals() {
                 states.reloadStatusPage++;
                 showToast({
                   text: {
-                    post: 'Post published. Check it out.',
-                    reply: 'Reply posted. Check it out.',
-                    edit: 'Post updated. Check it out.',
+                    post: t`Post published. Check it out.`,
+                    reply: t`Reply posted. Check it out.`,
+                    edit: t`Post updated. Check it out.`,
                   }[type || 'post'],
                   delay: 1000,
                   duration: 10_000, // 10 seconds
