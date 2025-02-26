@@ -1,3 +1,4 @@
+import { useLingui } from '@lingui/react/macro';
 import { useEffect } from 'preact/hooks';
 
 import { api } from '../utils/api';
@@ -8,6 +9,7 @@ import AccountInfo from './account-info';
 import Icon from './icon';
 
 function AccountSheet({ account, instance: propInstance, onClose }) {
+  const { t } = useLingui();
   const { masto, instance, authenticated } = api({ instance: propInstance });
   const isString = typeof account === 'string';
 
@@ -33,7 +35,7 @@ function AccountSheet({ account, instance: propInstance, onClose }) {
     >
       {!!onClose && (
         <button type="button" class="sheet-close outer" onClick={onClose}>
-          <Icon icon="x" />
+          <Icon icon="x" alt={t`Close`} />
         </button>
       )}
       <AccountInfo

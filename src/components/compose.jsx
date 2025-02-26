@@ -1,6 +1,8 @@
 import './compose.css';
 import '@github/text-expander-element';
 
+import { msg, plural } from '@lingui/core/macro';
+import { Trans, useLingui } from '@lingui/react/macro';
 import { MenuItem } from '@szhsin/react-menu';
 import { deepEqual } from 'fast-equals';
 import Fuse from 'fuse.js';
@@ -14,9 +16,10 @@ import {
 } from 'preact/hooks';
 import { useHotkeys } from 'react-hotkeys-hook';
 import stringLength from 'string-length';
-import { detectAll } from 'tinyld/light';
+// import { detectAll } from 'tinyld/light';
 import { uid } from 'uid/single';
 import { useDebouncedCallback, useThrottledCallback } from 'use-debounce';
+import useResizeObserver from 'use-resize-observer';
 import { useSnapshot } from 'valtio';
 
 import poweredByGiphyURL from '../assets/powered-by-giphy.svg';
@@ -27,11 +30,14 @@ import urlRegex from '../data/url-regex';
 import { api } from '../utils/api';
 import db from '../utils/db';
 import emojifyText from '../utils/emojify-text';
+import i18nDuration from '../utils/i18n-duration';
 import isRTL from '../utils/is-rtl';
 import localeMatch from '../utils/locale-match';
 import localeCode2Text from '../utils/localeCode2Text';
+import mem from '../utils/mem';
 import openCompose from '../utils/open-compose';
 import pmem from '../utils/pmem';
+import prettyBytes from '../utils/pretty-bytes';
 import { fetchRelationships } from '../utils/relationships';
 import shortenNumber from '../utils/shorten-number';
 import showToast from '../utils/show-toast';
@@ -53,6 +59,10 @@ import AccountBlock from './account-block';
 import Icon from './icon';
 import Loader from './loader';
 import Modal from './modal';
+import ScheduledAtField, {
+  getLocalTimezoneName,
+  MIN_SCHEDULED_AT,
+} from './ScheduledAtField';
 import Status from './status';
 
 const {
@@ -74,16 +84,15 @@ const supportedLanguagesMap = supportedLanguages.reduce((acc, l) => {
 */
 
 const expiryOptions = {
-  '5 minutes': 5 * 60,
-  '30 minutes': 30 * 60,
-  '1 hour': 60 * 60,
-  '6 hours': 6 * 60 * 60,
-  '12 hours': 12 * 60 * 60,
-  '1 day': 24 * 60 * 60,
-  '3 days': 3 * 24 * 60 * 60,
-  '7 days': 7 * 24 * 60 * 60,
+  300: i18nDuration(5, 'minute'),
+  1_800: i18nDuration(30, 'minute'),
+  3_600: i18nDuration(1, 'hour'),
+  21_600: i18nDuration(6, 'hour'),
+  86_400: i18nDuration(1, 'day'),
+  259_200: i18nDuration(3, 'day'),
+  604_800: i18nDuration(1, 'week'),
 };
-const expirySeconds = Object.values(expiryOptions);
+const expirySeconds = Object.keys(expiryOptions);
 const oneDay = 24 * 60 * 60;
 
 const expiresInFromExpiresAt = (expiresAt) => {
@@ -137,8 +146,8 @@ const MENTION_RE = new RegExp(
 
 // AI-generated, all other regexes are too complicated
 const HASHTAG_RE = new RegExp(
-  `(^|[^=\\/\\w])(#[a-z0-9_]+([a-z0-9_.]+[a-z0-9_]+)?)(?![\\/\\w])`,
-  'ig',
+  `(^|[^=\\/\\w])(#[\\p{L}\\p{N}_]+([\\p{L}\\p{N}_.]+[\\p{L}\\p{N}_]+)?)(?![\\/\\w])`,
+  'iug',
 );
 
 // https://github.com/mastodon/mastodon/blob/23e32a4b3031d1da8b911e0145d61b4dd47c4f96/app/models/custom_emoji.rb#L31
@@ -191,9 +200,19 @@ function highlightText(text, { maxCharacters = Infinity }) {
     ); // Emoji shortcodes
 }
 
-const rtf = new Intl.RelativeTimeFormat();
+// const rtf = new Intl.RelativeTimeFormat();
+const RTF = mem((locale) => new Intl.RelativeTimeFormat(locale || undefined));
+const LF = mem((locale) => new Intl.ListFormat(locale || undefined));
 
 const CUSTOM_EMOJIS_COUNT = 100;
+
+const ADD_LABELS = {
+  media: msg`Add media`,
+  customEmoji: msg`Add custom emoji`,
+  gif: msg`Add GIF`,
+  poll: msg`Add poll`,
+  scheduledPost: msg`Schedule post`,
+};
 
 function Compose({
   onClose,
@@ -203,6 +222,10 @@ function Compose({
   standalone,
   hasOpener,
 }) {
+  const { i18n, _, t } = useLingui();
+  const rtf = RTF(i18n.locale);
+  const lf = LF(i18n.locale);
+
   console.warn('RENDER COMPOSER');
   const { masto, instance } = api();
   const [uiState, setUIState] = useState('default');
@@ -218,11 +241,11 @@ function Compose({
   const {
     statuses: {
       maxCharacters,
-      maxMediaAttachments,
+      maxMediaAttachments, // Beware: it can be undefined!
       charactersReservedPerUrl,
     } = {},
     mediaAttachments: {
-      supportedMimeTypes = [],
+      supportedMimeTypes,
       imageSizeLimit,
       imageMatrixLimit,
       videoSizeLimit,
@@ -247,6 +270,7 @@ function Compose({
   const prevLanguage = useRef(language);
   const [mediaAttachments, setMediaAttachments] = useState([]);
   const [poll, setPoll] = useState(null);
+  const [scheduledAt, setScheduledAt] = useState(null);
 
   const prefs = store.account.get('preferences') || {};
 
@@ -357,6 +381,7 @@ function Compose({
         sensitive,
         poll,
         mediaAttachments,
+        scheduledAt,
       } = draftStatus;
       const composablePoll = !!poll?.options && {
         ...poll,
@@ -376,12 +401,13 @@ function Compose({
       if (sensitive !== null) setSensitive(sensitive);
       if (composablePoll) setPoll(composablePoll);
       if (mediaAttachments) setMediaAttachments(mediaAttachments);
+      if (scheduledAt) setScheduledAt(scheduledAt);
     }
   }, [draftStatus, editStatus, replyToStatus]);
 
   const formRef = useRef();
 
-  const beforeUnloadCopy = 'You have unsaved changes. Discard this post?';
+  const beforeUnloadCopy = t`You have unsaved changes. Discard this post?`;
   const canClose = () => {
     const { value, dataset } = textareaRef.current;
 
@@ -556,6 +582,7 @@ function Compose({
         sensitive,
         poll,
         mediaAttachments,
+        scheduledAt,
       },
     };
     if (
@@ -592,17 +619,38 @@ function Compose({
     const handleItems = (e) => {
       const { items } = e.clipboardData || e.dataTransfer;
       const files = [];
+      const unsupportedFiles = [];
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         if (item.kind === 'file') {
           const file = item.getAsFile();
-          if (file && supportedMimeTypes.includes(file.type)) {
+          if (
+            supportedMimeTypes !== undefined &&
+            !supportedMimeTypes.includes(file.type)
+          ) {
+            unsupportedFiles.push(file);
+          } else {
             files.push(file);
           }
         }
       }
+      if (unsupportedFiles.length > 0) {
+        alert(
+          plural(unsupportedFiles.length, {
+            one: `File ${unsupportedFiles[0].name} is not supported.`,
+            other: `Files ${lf.format(
+              unsupportedFiles.map((f) => f.name),
+            )} are not supported.`,
+          }),
+        );
+      }
       if (files.length > 0 && mediaAttachments.length >= maxMediaAttachments) {
-        alert(`You can only attach up to ${maxMediaAttachments} files.`);
+        alert(
+          plural(maxMediaAttachments, {
+            one: 'You can only attach up to 1 file.',
+            other: 'You can only attach up to # files.',
+          }),
+        );
         return;
       }
       console.log({ files });
@@ -610,11 +658,19 @@ function Compose({
         e.preventDefault();
         e.stopPropagation();
         // Auto-cut-off files to avoid exceeding maxMediaAttachments
-        const max = maxMediaAttachments - mediaAttachments.length;
-        const allowedFiles = files.slice(0, max);
-        if (allowedFiles.length <= 0) {
-          alert(`You can only attach up to ${maxMediaAttachments} files.`);
-          return;
+        let allowedFiles = files;
+        if (maxMediaAttachments !== undefined) {
+          const max = maxMediaAttachments - mediaAttachments.length;
+          allowedFiles = allowedFiles.slice(0, max);
+          if (allowedFiles.length <= 0) {
+            alert(
+              plural(maxMediaAttachments, {
+                one: 'You can only attach up to 1 file.',
+                other: 'You can only attach up to # files.',
+              }),
+            );
+            return;
+          }
         }
         const mediaFiles = allowedFiles.map((file) => ({
           file,
@@ -693,6 +749,46 @@ function Compose({
     states.composerState.minimized = true;
   };
 
+  const gifPickerDisabled =
+    uiState === 'loading' ||
+    (maxMediaAttachments !== undefined &&
+      mediaAttachments.length >= maxMediaAttachments) ||
+    !!poll;
+
+  // If maxOptions is not defined or defined and is greater than 1, show poll button
+  const showPollButton = maxOptions == null || maxOptions > 1;
+  const pollButtonDisabled =
+    uiState === 'loading' || !!poll || !!mediaAttachments.length;
+  const onPollButtonClick = () => {
+    setPoll({
+      options: ['', ''],
+      expiresIn: 24 * 60 * 60, // 1 day
+      multiple: false,
+    });
+  };
+
+  const addSubToolbarRef = useRef();
+  const [showAddButton, setShowAddButton] = useState(false);
+  useResizeObserver({
+    ref: addSubToolbarRef,
+    box: 'border-box',
+    onResize: ({ width }) => {
+      // If scrollable, it's truncated
+      const { scrollWidth } = addSubToolbarRef.current;
+      const truncated = scrollWidth > width;
+      const overTruncated = width < 84; // roughly two buttons width
+      setShowAddButton(overTruncated || truncated);
+      addSubToolbarRef.current.hidden = overTruncated;
+    },
+  });
+
+  const showScheduledAt = !editStatus;
+  const scheduledAtButtonDisabled = uiState === 'loading' || !!scheduledAt;
+  const onScheduledAtClick = () => {
+    const date = new Date(Date.now() + MIN_SCHEDULED_AT);
+    setScheduledAt(date);
+  };
+
   return (
     <div id="compose-container-outer">
       <div id="compose-container" class={standalone ? 'standalone' : ''}>
@@ -747,6 +843,7 @@ function Compose({
                       sensitive,
                       poll,
                       mediaAttachments,
+                      scheduledAt,
                     },
                   });
 
@@ -757,14 +854,14 @@ function Compose({
                   onClose();
                 }}
               >
-                <Icon icon="popout" alt="Pop out" />
+                <Icon icon="popout" alt={t`Pop out`} />
               </button>
               <button
                 type="button"
                 class="plain4 min-button"
                 onClick={onMinimize}
               >
-                <Icon icon="minimize" alt="Minimize" />
+                <Icon icon="minimize" alt={t`Minimize`} />
               </button>{' '}
               <button
                 type="button"
@@ -776,7 +873,7 @@ function Compose({
                   }
                 }}
               >
-                <Icon icon="x" />
+                <Icon icon="x" alt={t`Close`} />
               </button>
             </span>
           ) : (
@@ -800,20 +897,19 @@ function Compose({
                   // }
 
                   if (!window.opener) {
-                    alert('Looks like you closed the parent window.');
+                    alert(t`Looks like you closed the parent window.`);
                     return;
                   }
 
                   if (window.opener.__STATES__.showCompose) {
                     if (window.opener.__STATES__.composerState?.publishing) {
                       alert(
-                        'Looks like you already have a compose field open in the parent window and currently publishing. Please wait for it to be done and try again later.',
+                        t`Looks like you already have a compose field open in the parent window and currently publishing. Please wait for it to be done and try again later.`,
                       );
                       return;
                     }
 
-                    let confirmText =
-                      'Looks like you already have a compose field open in the parent window. Popping in this window will discard the changes you made in the parent window. Continue?';
+                    let confirmText = t`Looks like you already have a compose field open in the parent window. Popping in this window will discard the changes you made in the parent window. Continue?`;
                     const yes = confirm(confirmText);
                     if (!yes) return;
                   }
@@ -836,6 +932,7 @@ function Compose({
                           sensitive,
                           poll,
                           mediaAttachments,
+                          scheduledAt,
                         },
                       };
                       window.opener.__COMPOSE__ = passData; // Pass it here instead of `showCompose` due to some weird proxy issue again
@@ -855,7 +952,7 @@ function Compose({
                   });
                 }}
               >
-                <Icon icon="popin" alt="Pop in" />
+                <Icon icon="popin" alt={t`Pop in`} />
               </button>
             )
           )}
@@ -864,18 +961,22 @@ function Compose({
           <div class="status-preview">
             <Status status={replyToStatus} size="s" previewMode />
             <div class="status-preview-legend reply-to">
-              Replying to @
-              {replyToStatus.account.acct || replyToStatus.account.username}
-              &rsquo;s post
-              {replyToStatusMonthsAgo >= 3 && (
-                <>
-                  {' '}
-                  (
+              {replyToStatusMonthsAgo > 0 ? (
+                <Trans>
+                  Replying to @
+                  {replyToStatus.account.acct || replyToStatus.account.username}
+                  &rsquo;s post (
                   <strong>
                     {rtf.format(-replyToStatusMonthsAgo, 'month')}
                   </strong>
                   )
-                </>
+                </Trans>
+              ) : (
+                <Trans>
+                  Replying to @
+                  {replyToStatus.account.acct || replyToStatus.account.username}
+                  &rsquo;s post
+                </Trans>
               )}
             </div>
           </div>
@@ -883,7 +984,9 @@ function Compose({
         {!!editStatus && (
           <div class="status-preview">
             <Status status={editStatus} size="s" previewMode />
-            <div class="status-preview-legend">Editing source post</div>
+            <div class="status-preview-legend">
+              <Trans>Editing source post</Trans>
+            </div>
           </div>
         )}
         <form
@@ -906,10 +1009,16 @@ function Compose({
             const formData = new FormData(e.target);
             const entries = Object.fromEntries(formData.entries());
             console.log('ENTRIES', entries);
-            let { status, visibility, sensitive, spoilerText } = entries;
+            let { status, visibility, sensitive, spoilerText, scheduledAt } =
+              entries;
 
             // Pre-cleanup
             sensitive = sensitive === 'on'; // checkboxes return "on" if checked
+
+            // Convert datetime-local input value to RFC3339 Date string value
+            scheduledAt = scheduledAt
+              ? new Date(scheduledAt).toISOString()
+              : undefined;
 
             // Validation
             /* Let the backend validate this
@@ -929,11 +1038,11 @@ function Compose({
           */
             if (poll) {
               if (poll.options.length < 2) {
-                alert('Poll must have at least 2 options');
+                alert(t`Poll must have at least 2 options`);
                 return;
               }
               if (poll.options.some((option) => option === '')) {
-                alert('Some poll choices are empty');
+                alert(t`Some poll choices are empty`);
                 return;
               }
             }
@@ -946,7 +1055,7 @@ function Compose({
               );
               if (hasNoDescriptions) {
                 const yes = confirm(
-                  'Some media have no descriptions. Continue?',
+                  t`Some media have no descriptions. Continue?`,
                 );
                 if (!yes) return;
               }
@@ -998,7 +1107,7 @@ function Compose({
                     results.forEach((result) => {
                       if (result.status === 'rejected') {
                         console.error(result);
-                        alert(result.reason || `Attachment #${i} failed`);
+                        alert(result.reason || t`Attachment #${i} failed`);
                       }
                     });
                     return;
@@ -1040,6 +1149,7 @@ function Compose({
                   params.visibility = visibility;
                   // params.inReplyToId = replyToStatus?.id || undefined;
                   params.in_reply_to_id = replyToStatus?.id || undefined;
+                  params.scheduled_at = scheduledAt;
                 }
                 params = removeNullUndefined(params);
                 console.log('POST', params);
@@ -1076,6 +1186,7 @@ function Compose({
                   type: editStatus ? 'edit' : replyToStatus ? 'reply' : 'post',
                   newStatus,
                   instance,
+                  scheduledAt,
                 });
               } catch (e) {
                 states.composerState.publishing = false;
@@ -1092,7 +1203,7 @@ function Compose({
               ref={spoilerTextRef}
               type="text"
               name="spoilerText"
-              placeholder="Content warning"
+              placeholder={t`Content warning`}
               disabled={uiState === 'loading'}
               class="spoiler-text-field"
               lang={language}
@@ -1108,7 +1219,7 @@ function Compose({
             />
             <label
               class={`toolbar-button ${sensitive ? 'highlight' : ''}`}
-              title="Content warning or sensitive media"
+              title={t`Content warning or sensitive media`}
             >
               <input
                 name="sensitive"
@@ -1131,7 +1242,7 @@ function Compose({
               class={`toolbar-button ${
                 visibility !== 'public' && !sensitive ? 'show-field' : ''
               } ${visibility !== 'public' ? 'highlight' : ''}`}
-              title={`Visibility: ${visibility}`}
+              title={visibility}
             >
               <Icon icon={visibilityIconsMap[visibility]} alt={visibility} />
               <select
@@ -1144,11 +1255,23 @@ function Compose({
                 dir="auto"
               >
                 <option value="public">
-                  Public <Icon icon="earth" />
+                  <Trans>Public</Trans>
                 </option>
-                <option value="unlisted">Unlisted</option>
-                <option value="private">Followers only</option>
-                <option value="direct">Private mention</option>
+                {(supports('@pleroma/local-visibility-post') ||
+                  supports('@akkoma/local-visibility-post')) && (
+                  <option value="local">
+                    <Trans>Local</Trans>
+                  </option>
+                )}
+                <option value="unlisted">
+                  <Trans>Unlisted</Trans>
+                </option>
+                <option value="private">
+                  <Trans>Followers only</Trans>
+                </option>
+                <option value="direct">
+                  <Trans>Private mention</Trans>
+                </option>
               </select>
             </label>{' '}
           </div>
@@ -1156,10 +1279,10 @@ function Compose({
             ref={textareaRef}
             placeholder={
               replyToStatus
-                ? 'Post your reply'
+                ? t`Post your reply`
                 : editStatus
-                ? 'Edit your post'
-                : 'What are you doing?'
+                  ? t`Edit your post`
+                  : t`What are you doing?`
             }
             required={mediaAttachments?.length === 0}
             disabled={uiState === 'loading'}
@@ -1210,7 +1333,10 @@ function Compose({
                     onDescriptionChange={(value) => {
                       setMediaAttachments((attachments) => {
                         const newAttachments = [...attachments];
-                        newAttachments[i].description = value;
+                        newAttachments[i] = {
+                          ...newAttachments[i],
+                          description: value,
+                        };
                         return newAttachments;
                       });
                     }}
@@ -1233,7 +1359,9 @@ function Compose({
                     setSensitive(sensitive);
                   }}
                 />{' '}
-                <span>Mark media as sensitive</span>{' '}
+                <span>
+                  <Trans>Mark media as sensitive</Trans>
+                </span>{' '}
                 <Icon icon={`eye-${sensitive ? 'close' : 'open'}`} />
               </label>
             </div>
@@ -1257,81 +1385,124 @@ function Compose({
               }}
             />
           )}
-          <div
-            class="toolbar wrap"
-            style={{
-              justifyContent: 'flex-end',
-            }}
-          >
-            <span>
-              <label class="toolbar-button">
-                <input
-                  type="file"
-                  accept={supportedMimeTypes.join(',')}
-                  multiple={mediaAttachments.length < maxMediaAttachments - 1}
-                  disabled={
-                    uiState === 'loading' ||
-                    mediaAttachments.length >= maxMediaAttachments ||
-                    !!poll
-                  }
-                  onChange={(e) => {
-                    const files = e.target.files;
-                    if (!files) return;
-
-                    const mediaFiles = Array.from(files).map((file) => ({
-                      file,
-                      type: file.type,
-                      size: file.size,
-                      url: URL.createObjectURL(file),
-                      id: null, // indicate uploaded state
-                      description: null,
-                    }));
-                    console.log('MEDIA ATTACHMENTS', files, mediaFiles);
-
-                    // Validate max media attachments
-                    if (
-                      mediaAttachments.length + mediaFiles.length >
-                      maxMediaAttachments
-                    ) {
-                      alert(
-                        `You can only attach up to ${maxMediaAttachments} files.`,
-                      );
-                    } else {
-                      setMediaAttachments((attachments) => {
-                        return attachments.concat(mediaFiles);
-                      });
-                    }
-                    // Reset
-                    e.target.value = '';
-                  }}
-                />
-                <Icon icon="attachment" />
+          {scheduledAt && (
+            <div class="toolbar scheduled-at">
+              <button
+                type="button"
+                class="plain4 small"
+                onClick={() => {
+                  setScheduledAt(null);
+                }}
+              >
+                <Icon icon="x" />
+              </button>
+              <label>
+                <Trans>
+                  Posting on{' '}
+                  <ScheduledAtField
+                    scheduledAt={scheduledAt}
+                    setScheduledAt={setScheduledAt}
+                  />
+                </Trans>
+                <br />
+                <small>{getLocalTimezoneName()}</small>
               </label>
-              {/* If maxOptions is not defined or defined and is greater than 1, show poll button */}
-              {maxOptions == null ||
-                (maxOptions > 1 && (
-                  <>
+            </div>
+          )}
+          <div class="toolbar compose-footer">
+            <span class="add-toolbar-button-group spacer">
+              {showAddButton && (
+                <Menu2
+                  portal={{
+                    target: document.body,
+                  }}
+                  containerProps={{
+                    style: {
+                      zIndex: 1001,
+                    },
+                  }}
+                  menuButton={({ open }) => (
                     <button
                       type="button"
-                      class="toolbar-button"
-                      disabled={
-                        uiState === 'loading' ||
-                        !!poll ||
-                        !!mediaAttachments.length
-                      }
+                      class={`toolbar-button add-button ${
+                        open ? 'active' : ''
+                      }`}
+                    >
+                      <Icon icon="plus" title={t`Add`} />
+                    </button>
+                  )}
+                >
+                  <MenuItem className="compose-menu-add-media">
+                    <label class="compose-menu-add-media-field">
+                      <FilePickerInput
+                        hidden
+                        supportedMimeTypes={supportedMimeTypes}
+                        maxMediaAttachments={maxMediaAttachments}
+                        mediaAttachments={mediaAttachments}
+                        disabled={
+                          uiState === 'loading' ||
+                          mediaAttachments.length >= maxMediaAttachments ||
+                          !!poll
+                        }
+                        setMediaAttachments={setMediaAttachments}
+                      />
+                    </label>
+                    <Icon icon="media" /> <span>{_(ADD_LABELS.media)}</span>
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      setShowEmoji2Picker(true);
+                    }}
+                  >
+                    <Icon icon="emoji2" />{' '}
+                    <span>{_(ADD_LABELS.customEmoji)}</span>
+                  </MenuItem>
+                  {!!states.settings.composerGIFPicker && (
+                    <MenuItem
+                      disabled={gifPickerDisabled}
                       onClick={() => {
-                        setPoll({
-                          options: ['', ''],
-                          expiresIn: 24 * 60 * 60, // 1 day
-                          multiple: false,
-                        });
+                        setShowGIFPicker(true);
                       }}
                     >
-                      <Icon icon="poll" alt="Add poll" />
-                    </button>
-                  </>
-                ))}
-              {/* <button
+                      <span class="icon icon-gif" role="img" />
+                      <span>{_(ADD_LABELS.gif)}</span>
+                    </MenuItem>
+                  )}
+                  {showPollButton && (
+                    <MenuItem
+                      disabled={pollButtonDisabled}
+                      onClick={onPollButtonClick}
+                    >
+                      <Icon icon="poll" /> <span>{_(ADD_LABELS.poll)}</span>
+                    </MenuItem>
+                  )}
+                  {showScheduledAt && (
+                    <MenuItem
+                      disabled={scheduledAtButtonDisabled}
+                      onClick={onScheduledAtClick}
+                    >
+                      <Icon icon="schedule" />{' '}
+                      <span>{_(ADD_LABELS.scheduledPost)}</span>
+                    </MenuItem>
+                  )}
+                </Menu2>
+              )}
+              <span class="add-sub-toolbar-button-group" ref={addSubToolbarRef}>
+                <label class="toolbar-button">
+                  <FilePickerInput
+                    supportedMimeTypes={supportedMimeTypes}
+                    maxMediaAttachments={maxMediaAttachments}
+                    mediaAttachments={mediaAttachments}
+                    disabled={
+                      uiState === 'loading' ||
+                      mediaAttachments.length >= maxMediaAttachments ||
+                      !!poll
+                    }
+                    setMediaAttachments={setMediaAttachments}
+                  />
+                  <Icon icon="media" alt={_(ADD_LABELS.media)} />
+                </label>
+                {/* <button
                 type="button"
                 class="toolbar-button"
                 disabled={uiState === 'loading'}
@@ -1341,34 +1512,56 @@ function Compose({
               >
                 <Icon icon="at" />
               </button> */}
-              <button
-                type="button"
-                class="toolbar-button"
-                disabled={uiState === 'loading'}
-                onClick={() => {
-                  setShowEmoji2Picker(true);
-                }}
-              >
-                <Icon icon="emoji2" />
-              </button>
-              {!!states.settings.composerGIFPicker && (
                 <button
                   type="button"
-                  class="toolbar-button gif-picker-button"
-                  disabled={
-                    uiState === 'loading' ||
-                    mediaAttachments.length >= maxMediaAttachments ||
-                    !!poll
-                  }
+                  class="toolbar-button"
+                  disabled={uiState === 'loading'}
                   onClick={() => {
-                    setShowGIFPicker(true);
+                    setShowEmoji2Picker(true);
                   }}
                 >
-                  <span>GIF</span>
+                  <Icon icon="emoji2" alt={_(ADD_LABELS.customEmoji)} />
                 </button>
-              )}
+                {!!states.settings.composerGIFPicker && (
+                  <button
+                    type="button"
+                    class="toolbar-button gif-picker-button"
+                    disabled={gifPickerDisabled}
+                    onClick={() => {
+                      setShowGIFPicker(true);
+                    }}
+                  >
+                    <span
+                      class="icon icon-gif"
+                      aria-label={_(ADD_LABELS.gif)}
+                    />
+                  </button>
+                )}
+                {showPollButton && (
+                  <>
+                    <button
+                      type="button"
+                      class="toolbar-button"
+                      disabled={pollButtonDisabled}
+                      onClick={onPollButtonClick}
+                    >
+                      <Icon icon="poll" alt={_(ADD_LABELS.poll)} />
+                    </button>
+                  </>
+                )}
+                {showScheduledAt && (
+                  <button
+                    type="button"
+                    class={`toolbar-button ${scheduledAt ? 'highlight' : ''}`}
+                    disabled={scheduledAtButtonDisabled}
+                    onClick={onScheduledAtClick}
+                  >
+                    <Icon icon="schedule" alt={_(ADD_LABELS.scheduledPost)} />
+                  </button>
+                )}
+              </span>
             </span>
-            <div class="spacer" />
+            {/* <div class="spacer" /> */}
             {uiState === 'loading' ? (
               <Loader abrupt />
             ) : (
@@ -1400,25 +1593,44 @@ function Compose({
                 disabled={uiState === 'loading'}
                 dir="auto"
               >
-                {topSupportedLanguages.map(([code, common, native]) => (
-                  <option value={code} key={code}>
-                    {common} ({native})
-                  </option>
-                ))}
+                {topSupportedLanguages.map(([code, common, native]) => {
+                  const commonText = localeCode2Text({
+                    code,
+                    fallback: common,
+                  });
+                  const showCommon = commonText !== native;
+                  return (
+                    <option value={code} key={code}>
+                      {showCommon ? `${native} - ${commonText}` : commonText}
+                    </option>
+                  );
+                })}
                 <hr />
-                {restSupportedLanguages.map(([code, common, native]) => (
-                  <option value={code} key={code}>
-                    {common} ({native})
-                  </option>
-                ))}
+                {restSupportedLanguages.map(([code, common, native]) => {
+                  const commonText = localeCode2Text({
+                    code,
+                    fallback: common,
+                  });
+                  const showCommon = commonText !== native;
+                  return (
+                    <option value={code} key={code}>
+                      {showCommon ? `${native} - ${commonText}` : commonText}
+                    </option>
+                  );
+                })}
               </select>
             </label>{' '}
-            <button
-              type="submit"
-              class="large"
-              disabled={uiState === 'loading'}
-            >
-              {replyToStatus ? 'Reply' : editStatus ? 'Update' : 'Post'}
+            <button type="submit" disabled={uiState === 'loading'}>
+              {scheduledAt
+                ? t`Schedule`
+                : replyToStatus
+                  ? t`Reply`
+                  : editStatus
+                    ? t`Update`
+                    : t({
+                        message: 'Post',
+                        context: 'Submit button in composer',
+                      })}
             </button>
           </div>
         </form>
@@ -1531,7 +1743,10 @@ function Compose({
               console.log('GIF URL', url);
               if (mediaAttachments.length >= maxMediaAttachments) {
                 alert(
-                  `You can only attach up to ${maxMediaAttachments} files.`,
+                  plural(maxMediaAttachments, {
+                    one: 'You can only attach up to 1 file.',
+                    other: 'You can only attach up to # files.',
+                  }),
                 );
                 return;
               }
@@ -1540,7 +1755,7 @@ function Compose({
                 let theToast;
                 try {
                   theToast = showToast({
-                    text: 'Downloading GIF…',
+                    text: t`Downloading GIF…`,
                     duration: -1,
                   });
                   const blob = await fetch(url, {
@@ -1568,7 +1783,7 @@ function Compose({
                 } catch (err) {
                   console.error(err);
                   theToast?.hideToast?.();
-                  showToast('Failed to download GIF');
+                  showToast(t`Failed to download GIF`);
                 }
               })();
             }}
@@ -1576,6 +1791,58 @@ function Compose({
         </Modal>
       )}
     </div>
+  );
+}
+
+function FilePickerInput({
+  hidden,
+  supportedMimeTypes,
+  maxMediaAttachments,
+  mediaAttachments,
+  disabled = false,
+  setMediaAttachments,
+}) {
+  return (
+    <input
+      type="file"
+      hidden={hidden}
+      accept={supportedMimeTypes?.join(',')}
+      multiple={
+        maxMediaAttachments === undefined ||
+        maxMediaAttachments - mediaAttachments >= 2
+      }
+      disabled={disabled}
+      onChange={(e) => {
+        const files = e.target.files;
+        if (!files) return;
+
+        const mediaFiles = Array.from(files).map((file) => ({
+          file,
+          type: file.type,
+          size: file.size,
+          url: URL.createObjectURL(file),
+          id: null, // indicate uploaded state
+          description: null,
+        }));
+        console.log('MEDIA ATTACHMENTS', files, mediaFiles);
+
+        // Validate max media attachments
+        if (mediaAttachments.length + mediaFiles.length > maxMediaAttachments) {
+          alert(
+            plural(maxMediaAttachments, {
+              one: 'You can only attach up to 1 file.',
+              other: 'You can only attach up to # files.',
+            }),
+          );
+        } else {
+          setMediaAttachments((attachments) => {
+            return attachments.concat(mediaFiles);
+          });
+        }
+        // Reset
+        e.target.value = '';
+      }}
+    />
   );
 }
 
@@ -1607,7 +1874,8 @@ const getCustomEmojis = pmem(_getCustomEmojis, {
   maxAge: 30 * 60 * 1000, // 30 minutes
 });
 
-const detectLangs = (text) => {
+const detectLangs = async (text) => {
+  const { detectAll } = await import('tinyld/light');
   const langs = detectAll(text);
   if (langs?.length) {
     // return max 2
@@ -1617,6 +1885,7 @@ const detectLangs = (text) => {
 };
 
 const Textarea = forwardRef((props, ref) => {
+  const { t } = useLingui();
   const { masto, instance } = api();
   const [text, setText] = useState(ref.current?.value || '');
   const {
@@ -1643,8 +1912,13 @@ const Textarea = forwardRef((props, ref) => {
 
   const textExpanderRef = useRef();
   const textExpanderTextRef = useRef('');
+  const hasTextExpanderRef = useRef(false);
   useEffect(() => {
-    let handleChange, handleValue, handleCommited;
+    let handleChange,
+      handleValue,
+      handleCommited,
+      handleActivate,
+      handleDeactivate;
     if (textExpanderRef.current) {
       handleChange = (e) => {
         // console.log('text-expander-change', e);
@@ -1679,7 +1953,7 @@ const Textarea = forwardRef((props, ref) => {
                 ${encodeHTML(shortcode)}
               </li>`;
           });
-          html += `<li role="option" data-value="" data-more="${text}">More…</li>`;
+          html += `<li role="option" data-value="" data-more="${text}">${t`More…`}</li>`;
           // console.log({ emojis, html });
           menu.innerHTML = html;
           provide(
@@ -1756,7 +2030,7 @@ const Textarea = forwardRef((props, ref) => {
                 }
               });
               if (type === 'accounts') {
-                html += `<li role="option" data-value="" data-more="${text}">More…</li>`;
+                html += `<li role="option" data-value="" data-more="${text}">${t`More…`}</li>`;
               }
               menu.innerHTML = html;
               console.log('MENU', results, menu);
@@ -1825,6 +2099,24 @@ const Textarea = forwardRef((props, ref) => {
         'text-expander-committed',
         handleCommited,
       );
+
+      handleActivate = () => {
+        hasTextExpanderRef.current = true;
+      };
+
+      textExpanderRef.current.addEventListener(
+        'text-expander-activate',
+        handleActivate,
+      );
+
+      handleDeactivate = () => {
+        hasTextExpanderRef.current = false;
+      };
+
+      textExpanderRef.current.addEventListener(
+        'text-expander-deactivate',
+        handleDeactivate,
+      );
     }
 
     return () => {
@@ -1840,6 +2132,14 @@ const Textarea = forwardRef((props, ref) => {
         textExpanderRef.current.removeEventListener(
           'text-expander-committed',
           handleCommited,
+        );
+        textExpanderRef.current.removeEventListener(
+          'text-expander-activate',
+          handleActivate,
+        );
+        textExpanderRef.current.removeEventListener(
+          'text-expander-deactivate',
+          handleDeactivate,
         );
       }
     };
@@ -1897,13 +2197,15 @@ const Textarea = forwardRef((props, ref) => {
     });
     const text = dom.innerText?.trim();
     if (!text) return;
-    const langs = detectLangs(text);
-    if (langs?.length) {
-      onTrigger?.({
-        name: 'auto-detect-language',
-        languages: langs,
-      });
-    }
+    (async () => {
+      const langs = await detectLangs(text);
+      if (langs?.length) {
+        onTrigger?.({
+          name: 'auto-detect-language',
+          languages: langs,
+        });
+      }
+    })();
   }, 2000);
 
   return (
@@ -1928,7 +2230,8 @@ const Textarea = forwardRef((props, ref) => {
         onKeyDown={(e) => {
           // Get line before cursor position after pressing 'Enter'
           const { key, target } = e;
-          if (key === 'Enter' && !(e.ctrlKey || e.metaKey)) {
+          const hasTextExpander = hasTextExpanderRef.current;
+          if (key === 'Enter' && !(e.ctrlKey || e.metaKey || hasTextExpander)) {
             try {
               const { value, selectionStart } = target;
               const textBeforeCursor = value.slice(0, selectionStart);
@@ -2016,10 +2319,10 @@ function CharCountMeter({ maxCharacters = 500, hidden }) {
           leftChars <= -10
             ? 'explode'
             : leftChars <= 0
-            ? 'danger'
-            : leftChars <= 20
-            ? 'warning'
-            : ''
+              ? 'danger'
+              : leftChars <= 20
+                ? 'warning'
+                : ''
         }`}
         value={charCount}
         max={maxCharacters}
@@ -2027,16 +2330,6 @@ function CharCountMeter({ maxCharacters = 500, hidden }) {
       <span class="counter">{leftChars}</span>
     </span>
   );
-}
-
-function prettyBytes(bytes) {
-  const units = ['bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-  let unitIndex = 0;
-  while (bytes >= 1024) {
-    bytes /= 1024;
-    unitIndex++;
-  }
-  return `${bytes.toFixed(0).toLocaleString()} ${units[unitIndex]}`;
 }
 
 function scaleDimension(matrix, matrixLimit, width, height) {
@@ -2056,6 +2349,7 @@ function MediaAttachment({
   onDescriptionChange = () => {},
   onRemove = () => {},
 }) {
+  const { i18n, t } = useLingui();
   const [uiState, setUIState] = useState('default');
   const supportsEdit = supports('@mastodon/edit-media-attributes');
   const { type, id, file } = attachment;
@@ -2167,7 +2461,9 @@ function MediaAttachment({
     <>
       {!!id && !supportsEdit ? (
         <div class="media-desc">
-          <span class="tag">Uploaded</span>
+          <span class="tag">
+            <Trans>Uploaded</Trans>
+          </span>
           <p title={description}>
             {attachment.description || <i>No description</i>}
           </p>
@@ -2179,9 +2475,9 @@ function MediaAttachment({
           lang={lang}
           placeholder={
             {
-              image: 'Image description',
-              video: 'Video description',
-              audio: 'Audio description',
+              image: t`Image description`,
+              video: t`Video description`,
+              audio: t`Audio description`,
             }[suffixType]
           }
           autoCapitalize="sentences"
@@ -2217,7 +2513,7 @@ function MediaAttachment({
     switch (type) {
       case 'imageSizeLimit': {
         const { imageSize, imageSizeLimit } = details;
-        return `File size too large. Uploading might encounter issues. Try reduce the file size from ${prettyBytes(
+        return t`File size too large. Uploading might encounter issues. Try reduce the file size from ${prettyBytes(
           imageSize,
         )} to ${prettyBytes(imageSizeLimit)} or lower.`;
       }
@@ -2229,11 +2525,15 @@ function MediaAttachment({
           width,
           height,
         );
-        return `Dimension too large. Uploading might encounter issues. Try reduce dimension from ${width.toLocaleString()}×${height.toLocaleString()}px to ${newWidth.toLocaleString()}×${newHeight.toLocaleString()}px.`;
+        return t`Dimension too large. Uploading might encounter issues. Try reduce dimension from ${i18n.number(
+          width,
+        )}×${i18n.number(height)}px to ${i18n.number(newWidth)}×${i18n.number(
+          newHeight,
+        )}px.`;
       }
       case 'videoSizeLimit': {
         const { videoSize, videoSizeLimit } = details;
-        return `File size too large. Uploading might encounter issues. Try reduce the file size from ${prettyBytes(
+        return t`File size too large. Uploading might encounter issues. Try reduce the file size from ${prettyBytes(
           videoSize,
         )} to ${prettyBytes(videoSizeLimit)} or lower.`;
       }
@@ -2245,11 +2545,15 @@ function MediaAttachment({
           width,
           height,
         );
-        return `Dimension too large. Uploading might encounter issues. Try reduce dimension from ${width.toLocaleString()}×${height.toLocaleString()}px to ${newWidth.toLocaleString()}×${newHeight.toLocaleString()}px.`;
+        return t`Dimension too large. Uploading might encounter issues. Try reduce dimension from ${i18n.number(
+          width,
+        )}×${i18n.number(height)}px to ${i18n.number(newWidth)}×${i18n.number(
+          newHeight,
+        )}px.`;
       }
       case 'videoFrameRateLimit': {
         // Not possible to detect this on client-side for now
-        return 'Frame rate too high. Uploading might encounter issues.';
+        return t`Frame rate too high. Uploading might encounter issues.`;
       }
     }
   };
@@ -2309,7 +2613,7 @@ function MediaAttachment({
             disabled={disabled}
             onClick={onRemove}
           >
-            <Icon icon="x" />
+            <Icon icon="x" alt={t`Remove`} />
           </button>
           {!!maxError && (
             <button
@@ -2326,7 +2630,7 @@ function MediaAttachment({
                 });
               }}
             >
-              <Icon icon="alert" />
+              <Icon icon="alert" alt={t`Error`} />
             </button>
           )}
         </div>
@@ -2345,15 +2649,15 @@ function MediaAttachment({
                 setShowModal(false);
               }}
             >
-              <Icon icon="x" />
+              <Icon icon="x" alt={t`Close`} />
             </button>
             <header>
               <h2>
                 {
                   {
-                    image: 'Edit image description',
-                    video: 'Edit video description',
-                    audio: 'Edit audio description',
+                    image: t`Edit image description`,
+                    video: t`Edit video description`,
+                    audio: t`Edit audio description`,
                   }[suffixType]
                 }
               </h2>
@@ -2388,8 +2692,8 @@ function MediaAttachment({
                         position="anchor"
                         overflow="auto"
                         menuButton={
-                          <button type="button" title="More" class="plain">
-                            <Icon icon="more" size="l" alt="More" />
+                          <button type="button" class="plain">
+                            <Icon icon="more" size="l" alt={t`More`} />
                           </button>
                         }
                       >
@@ -2398,7 +2702,7 @@ function MediaAttachment({
                           onClick={() => {
                             setUIState('loading');
                             toastRef.current = showToast({
-                              text: 'Generating description. Please wait...',
+                              text: t`Generating description. Please wait…`,
                               duration: -1,
                             });
                             // POST with multipart
@@ -2417,9 +2721,9 @@ function MediaAttachment({
                               } catch (e) {
                                 console.error(e);
                                 showToast(
-                                  `Failed to generate description${
-                                    e?.message ? `: ${e.message}` : ''
-                                  }`,
+                                  e.message
+                                    ? t`Failed to generate description: ${e.message}`
+                                    : t`Failed to generate description`,
                                 );
                               } finally {
                                 setUIState('default');
@@ -2431,12 +2735,14 @@ function MediaAttachment({
                           <Icon icon="sparkles2" />
                           {lang && lang !== 'en' ? (
                             <small>
-                              Generate description…
+                              <Trans>Generate description…</Trans>
                               <br />
                               (English)
                             </small>
                           ) : (
-                            <span>Generate description…</span>
+                            <span>
+                              <Trans>Generate description…</Trans>
+                            </span>
                           )}
                         </MenuItem>
                         {!!lang && lang !== 'en' && (
@@ -2445,7 +2751,7 @@ function MediaAttachment({
                             onClick={() => {
                               setUIState('loading');
                               toastRef.current = showToast({
-                                text: 'Generating description. Please wait...',
+                                text: t`Generating description. Please wait…`,
                                 duration: -1,
                               });
                               // POST with multipart
@@ -2468,7 +2774,7 @@ function MediaAttachment({
                                 } catch (e) {
                                   console.error(e);
                                   showToast(
-                                    `Failed to generate description${
+                                    t`Failed to generate description${
                                       e?.message ? `: ${e.message}` : ''
                                     }`,
                                   );
@@ -2481,11 +2787,14 @@ function MediaAttachment({
                           >
                             <Icon icon="sparkles2" />
                             <small>
-                              Generate description…
-                              <br />({localeCode2Text(lang)}){' '}
-                              <span class="more-insignificant">
-                                — experimental
-                              </span>
+                              <Trans>Generate description…</Trans>
+                              <br />
+                              <Trans>
+                                ({localeCode2Text(lang)}){' '}
+                                <span class="more-insignificant">
+                                  — experimental
+                                </span>
+                              </Trans>
                             </small>
                           </MenuItem>
                         )}
@@ -2499,7 +2808,7 @@ function MediaAttachment({
                     }}
                     disabled={uiState === 'loading'}
                   >
-                    Done
+                    <Trans>Done</Trans>
                   </button>
                 </footer>
               </div>
@@ -2521,6 +2830,7 @@ function Poll({
   minExpiration,
   maxCharactersPerOption,
 }) {
+  const { t } = useLingui();
   const { options, expiresIn, multiple } = poll;
 
   return (
@@ -2534,7 +2844,7 @@ function Poll({
               value={option}
               disabled={disabled}
               maxlength={maxCharactersPerOption}
-              placeholder={`Choice ${i + 1}`}
+              placeholder={t`Choice ${i + 1}`}
               lang={lang}
               spellCheck="true"
               dir="auto"
@@ -2553,7 +2863,7 @@ function Poll({
                 onInput(poll);
               }}
             >
-              <Icon icon="x" size="s" />
+              <Icon icon="x" size="s" alt={t`Remove`} />
             </button>
           </div>
         ))}
@@ -2581,10 +2891,10 @@ function Poll({
               onInput(poll);
             }}
           />{' '}
-          Multiple choices
+          <Trans>Multiple choices</Trans>
         </label>
         <label class="expires-in">
-          Duration{' '}
+          <Trans>Duration</Trans>{' '}
           <select
             value={expiresIn}
             disabled={disabled}
@@ -2595,12 +2905,12 @@ function Poll({
             }}
           >
             {Object.entries(expiryOptions)
-              .filter(([label, value]) => {
+              .filter(([value]) => {
                 return value >= minExpiration && value <= maxExpiration;
               })
-              .map(([label, value]) => (
+              .map(([value, label]) => (
                 <option value={value} key={value}>
-                  {label}
+                  {label()}
                 </option>
               ))}
           </select>
@@ -2615,7 +2925,7 @@ function Poll({
             onInput(null);
           }}
         >
-          Remove poll
+          <Trans>Remove poll</Trans>
         </button>
       </div>
     </div>
@@ -2641,16 +2951,16 @@ function filterShortcodes(emojis, searchTerm) {
       return bothStartWith
         ? a.length - b.length
         : aStartsWith
-        ? -1
-        : bStartsWith
-        ? 1
-        : bothContain
-        ? a.length - b.length
-        : aContains
-        ? -1
-        : bContains
-        ? 1
-        : 0;
+          ? -1
+          : bStartsWith
+            ? 1
+            : bothContain
+              ? a.length - b.length
+              : aContains
+                ? -1
+                : bContains
+                  ? 1
+                  : 0;
     })
     .slice(0, 5);
 }
@@ -2675,6 +2985,7 @@ function MentionModal({
   onSelect = () => {},
   defaultSearchTerm,
 }) {
+  const { t } = useLingui();
   const { masto } = api();
   const [uiState, setUIState] = useState('default');
   const [accounts, setAccounts] = useState([]);
@@ -2812,7 +3123,7 @@ function MentionModal({
     <div id="mention-sheet" class="sheet">
       {!!onClose && (
         <button type="button" class="sheet-close" onClick={onClose}>
-          <Icon icon="x" />
+          <Icon icon="x" alt={t`Close`} />
         </button>
       )}
       <header>
@@ -2829,7 +3140,7 @@ function MentionModal({
             required
             type="search"
             class="block"
-            placeholder="Search accounts"
+            placeholder={t`Search accounts`}
             onInput={(e) => {
               const { value } = e.target;
               debouncedLoadAccounts(value);
@@ -2870,7 +3181,7 @@ function MentionModal({
                       selectAccount(account);
                     }}
                   >
-                    <Icon icon="plus" size="xl" />
+                    <Icon icon="plus" size="xl" alt={t`Add`} />
                   </button>
                 </li>
               );
@@ -2882,7 +3193,9 @@ function MentionModal({
           </div>
         ) : uiState === 'error' ? (
           <div class="ui-state">
-            <p>Error loading accounts</p>
+            <p>
+              <Trans>Error loading accounts</Trans>
+            </p>
           </div>
         ) : null}
       </main>
@@ -2897,6 +3210,7 @@ function CustomEmojisModal({
   onSelect = () => {},
   defaultSearchTerm,
 }) {
+  const { t } = useLingui();
   const [uiState, setUIState] = useState('default');
   const customEmojisList = useRef([]);
   const [customEmojis, setCustomEmojis] = useState([]);
@@ -3018,12 +3332,14 @@ function CustomEmojisModal({
     <div id="custom-emojis-sheet" class="sheet">
       {!!onClose && (
         <button type="button" class="sheet-close" onClick={onClose}>
-          <Icon icon="x" />
+          <Icon icon="x" alt={t`Close`} />
         </button>
       )}
       <header>
         <div>
-          <b>Custom emojis</b>{' '}
+          <b>
+            <Trans>Custom emojis</Trans>
+          </b>{' '}
           {uiState === 'loading' ? (
             <Loader />
           ) : (
@@ -3042,7 +3358,7 @@ function CustomEmojisModal({
           <input
             ref={inputRef}
             type="search"
-            placeholder="Search emoji"
+            placeholder={t`Search emoji`}
             onInput={onFind}
             autocomplete="off"
             autocorrect="off"
@@ -3072,25 +3388,27 @@ function CustomEmojisModal({
           <div class="custom-emojis-list">
             {uiState === 'error' && (
               <div class="ui-state">
-                <p>Error loading custom emojis</p>
+                <p>
+                  <Trans>Error loading custom emojis</Trans>
+                </p>
               </div>
             )}
             {uiState === 'default' &&
               Object.entries(customEmojisCatList).map(
                 ([category, emojis]) =>
                   !!emojis?.length && (
-                    <>
+                    <div class="section-container">
                       <div class="section-header">
                         {{
-                          '--recent--': 'Recently used',
-                          '--others--': 'Others',
+                          '--recent--': t`Recently used`,
+                          '--others--': t`Others`,
                         }[category] || category}
                       </div>
                       <CustomEmojisList
                         emojis={emojis}
                         onSelect={onSelectEmoji}
                       />
-                    </>
+                    </div>
                   ),
               )}
           </div>
@@ -3101,6 +3419,7 @@ function CustomEmojisModal({
 }
 
 const CustomEmojisList = memo(({ emojis, onSelect }) => {
+  const { i18n } = useLingui();
   const [max, setMax] = useState(CUSTOM_EMOJIS_COUNT);
   const showMore = emojis.length > max;
   return (
@@ -3120,7 +3439,7 @@ const CustomEmojisList = memo(({ emojis, onSelect }) => {
           class="plain small"
           onClick={() => setMax(max + CUSTOM_EMOJIS_COUNT)}
         >
-          {(emojis.length - max).toLocaleString()} more…
+          <Trans>{i18n.number(emojis.length - max)} more…</Trans>
         </button>
       )}
     </section>
@@ -3187,6 +3506,7 @@ const CustomEmojiButton = memo(({ emoji, onClick, showCode }) => {
 
 const GIFS_PER_PAGE = 20;
 function GIFPickerModal({ onClose = () => {}, onSelect = () => {} }) {
+  const { i18n, t } = useLingui();
   const [uiState, setUIState] = useState('default');
   const [results, setResults] = useState([]);
   const formRef = useRef(null);
@@ -3212,6 +3532,7 @@ function GIFPickerModal({ onClose = () => {}, onSelect = () => {} }) {
           limit: GIFS_PER_PAGE,
           bundle: 'messaging_non_clips',
           offset,
+          lang: i18n.locale || 'en',
         };
         const response = await fetch(
           'https://api.giphy.com/v1/gifs/search?' + new URLSearchParams(query),
@@ -3241,7 +3562,7 @@ function GIFPickerModal({ onClose = () => {}, onSelect = () => {} }) {
     <div id="gif-picker-sheet" class="sheet">
       {!!onClose && (
         <button type="button" class="sheet-close" onClick={onClose}>
-          <Icon icon="x" />
+          <Icon icon="x" alt={t`Close`} />
         </button>
       )}
       <header>
@@ -3256,7 +3577,7 @@ function GIFPickerModal({ onClose = () => {}, onSelect = () => {} }) {
             ref={qRef}
             type="search"
             name="q"
-            placeholder="Search GIFs"
+            placeholder={t`Search GIFs`}
             required
             autocomplete="off"
             autocorrect="off"
@@ -3271,13 +3592,16 @@ function GIFPickerModal({ onClose = () => {}, onSelect = () => {} }) {
             src={poweredByGiphyURL}
             width="86"
             height="30"
+            alt={t`Powered by GIPHY`}
           />
         </form>
       </header>
       <main ref={scrollableRef} class={uiState === 'loading' ? 'loading' : ''}>
         {uiState === 'default' && (
           <div class="ui-state">
-            <p class="insignificant">Type to search GIFs</p>
+            <p class="insignificant">
+              <Trans>Type to search GIFs</Trans>
+            </p>
           </div>
         )}
         {uiState === 'loading' && !results?.data?.length && (
@@ -3299,8 +3623,8 @@ function GIFPickerModal({ onClose = () => {}, onSelect = () => {} }) {
                 const theImage = fixed_height_small?.url
                   ? fixed_height_small
                   : fixed_height_downsampled?.url
-                  ? fixed_height_downsampled
-                  : fixed_height;
+                    ? fixed_height_downsampled
+                    : fixed_height;
                 let { url, webp, width, height } = theImage;
                 if (+height > 100) {
                   width = (width / height) * 100;
@@ -3373,7 +3697,9 @@ function GIFPickerModal({ onClose = () => {}, onSelect = () => {} }) {
                   }}
                 >
                   <Icon icon="chevron-left" />
-                  <span>Previous</span>
+                  <span>
+                    <Trans>Previous</Trans>
+                  </span>
                 </button>
               )}
               <span />
@@ -3389,7 +3715,10 @@ function GIFPickerModal({ onClose = () => {}, onSelect = () => {} }) {
                     });
                   }}
                 >
-                  <span>Next</span> <Icon icon="chevron-right" />
+                  <span>
+                    <Trans>Next</Trans>
+                  </span>{' '}
+                  <Icon icon="chevron-right" />
                 </button>
               )}
             </p>
@@ -3403,7 +3732,9 @@ function GIFPickerModal({ onClose = () => {}, onSelect = () => {} }) {
         )}
         {uiState === 'error' && (
           <div class="ui-state">
-            <p>Error loading GIFs</p>
+            <p>
+              <Trans>Error loading GIFs</Trans>
+            </p>
           </div>
         )}
       </main>
