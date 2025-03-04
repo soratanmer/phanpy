@@ -1,3 +1,4 @@
+import { useLingui } from '@lingui/react/macro';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useSnapshot } from 'valtio';
 
@@ -8,6 +9,7 @@ import states from '../utils/states';
 import Icon from './icon';
 
 export default function ComposeButton() {
+  const { t } = useLingui();
   const snapStates = useSnapshot(states);
 
   function handleButton(e) {
@@ -45,7 +47,7 @@ export default function ComposeButton() {
         snapStates.composerState.publishing ? 'loading' : ''
       } ${snapStates.composerState.publishingError ? 'error' : ''}`}
     >
-      <Icon icon="quill" size="xl" alt="Compose" />
+      <Icon icon="quill" size="xl" alt={t`Compose`} />
     </button>
   );
 }
