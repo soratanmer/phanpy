@@ -1,6 +1,7 @@
 import '../components/links-bar.css';
 import './trending.css';
 
+import { Trans, useLingui } from '@lingui/react/macro';
 import { MenuItem } from '@szhsin/react-menu';
 import { getBlurHashAverageColor } from 'fast-blurhash';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
@@ -12,6 +13,7 @@ import Icon from '../components/icon';
 import Link from '../components/link';
 import Loader from '../components/loader';
 import Menu2 from '../components/menu2';
+import NameText from '../components/name-text';
 import RelativeTime from '../components/relative-time';
 import Timeline from '../components/timeline';
 import { api } from '../utils/api';
@@ -60,13 +62,14 @@ function fetchLinkList(masto, params) {
 }
 
 function Trending({ columnMode, ...props }) {
+  const { t } = useLingui();
   const snapStates = useSnapshot(states);
   const params = columnMode ? {} : useParams();
   const { masto, instance } = api({
     instance: props?.instance || params.instance,
   });
   const { masto: currentMasto, instance: currentInstance } = api();
-  const title = `Trending (${instance})`;
+  const title = t`Trending (${instance})`;
   useTitle(title, `/:instance?/trending`);
   // const navigate = useNavigate();
   const latestItem = useRef();
@@ -139,7 +142,7 @@ function Trending({ columnMode, ...props }) {
   const hasCurrentLink = !!currentLink;
   const currentLinkRef = useRef();
   const supportsTrendingLinkPosts =
-    sameCurrentInstance && supports('@mastodon/trending-hashtags');
+    sameCurrentInstance && supports('@mastodon/trending-link-posts');
 
   useEffect(() => {
     if (currentLink && currentLinkRef.current) {
@@ -222,10 +225,13 @@ function Trending({ columnMode, ...props }) {
         {!!links.length && (
           <div class="links-bar">
             <header>
-              <h3>Trending News</h3>
+              <h3>
+                <Trans>Trending News</Trans>
+              </h3>
             </header>
             {links.map((link) => {
               const {
+                authors,
                 authorName,
                 authorUrl,
                 blurhash,
@@ -241,6 +247,11 @@ function Trending({ columnMode, ...props }) {
                 url,
                 width,
               } = link;
+              const author = authors?.[0]?.account?.id
+                ? authors[0].account
+                : null;
+              const isShortTitle = title.length < 30;
+              const hasAuthor = !!(authorName || author);
               const domain = punycode.toUnicode(
                 URL.parse(url)
                   .hostname.replace(/^www\./, '')
@@ -263,14 +274,14 @@ function Trending({ columnMode, ...props }) {
                     ref={currentLink === url ? currentLinkRef : null}
                     href={url}
                     target="_blank"
-                    rel="noopener noreferrer"
-                    class={
+                    rel="noopener"
+                    class={`link-block ${
                       hasCurrentLink
                         ? currentLink === url
                           ? 'active'
                           : 'inactive'
                         : ''
-                    }
+                    }`}
                     style={
                       accentColor
                         ? {
@@ -319,13 +330,40 @@ function Trending({ columnMode, ...props }) {
                         </header>
                         {!!description && (
                           <p
-                            class="description"
+                            class={`description ${
+                              hasAuthor && !isShortTitle ? '' : 'more-lines'
+                            }`}
                             lang={language}
                             dir="auto"
                             title={description}
                           >
                             {description}
                           </p>
+                        )}
+                        {hasAuthor && (
+                          <>
+                            <hr />
+                            <p class="byline">
+                              <small>
+                                <Trans comment="By [Author]">
+                                  By{' '}
+                                  {author ? (
+                                    <NameText account={author} showAvatar />
+                                  ) : authorUrl ? (
+                                    <a
+                                      href={authorUrl}
+                                      target="_blank"
+                                      rel="noopener"
+                                    >
+                                      {authorName}
+                                    </a>
+                                  ) : (
+                                    authorName
+                                  )}
+                                </Trans>
+                              </small>
+                            </p>
+                          </>
                         )}
                       </div>
                     </article>
@@ -339,7 +377,10 @@ function Trending({ columnMode, ...props }) {
                       }}
                       disabled={url === currentLink}
                     >
-                      <Icon icon="comment2" /> <span>Mentions</span>{' '}
+                      <Icon icon="comment2" />{' '}
+                      <span>
+                        <Trans>Mentions</Trans>
+                      </span>{' '}
                       <Icon icon="chevron-down" />
                     </button>
                   )}
@@ -365,21 +406,25 @@ function Trending({ columnMode, ...props }) {
                         setCurrentLink(null);
                       }}
                     >
-                      <Icon icon="x" />
+                      <Icon icon="x" alt={t`Back to showing trending posts`} />
                     </button>
                   )}
                 </div>
                 <p>
-                  Showing posts mentioning{' '}
-                  <span class="link-text">
-                    {currentLink
-                      .replace(/^https?:\/\/(www\.)?/i, '')
-                      .replace(/\/$/, '')}
-                  </span>
+                  <Trans>
+                    Showing posts mentioning{' '}
+                    <span class="link-text">
+                      {currentLink
+                        .replace(/^https?:\/\/(www\.)?/i, '')
+                        .replace(/\/$/, '')}
+                    </span>
+                  </Trans>
                 </p>
               </>
             ) : (
-              <p class="insignificant">Trending posts</p>
+              <p class="insignificant">
+                <Trans>Trending posts</Trans>
+              </p>
             )}
           </div>
         )}
@@ -393,14 +438,16 @@ function Trending({ columnMode, ...props }) {
       title={title}
       titleComponent={
         <h1 class="header-double-lines">
-          <b>Trending</b>
+          <b>
+            <Trans>Trending</Trans>
+          </b>
           <div>{instance}</div>
         </h1>
       }
       id="trending"
       instance={instance}
-      emptyText="No trending posts."
-      errorText="Unable to load posts"
+      emptyText={t`No trending posts.`}
+      errorText={t`Unable to load posts`}
       fetchItems={hasCurrentLink ? fetchLinkMentions : fetchTrends}
       checkForUpdates={hasCurrentLink ? undefined : checkForUpdates}
       checkForUpdatesInterval={5 * 60 * 1000} // 5 minutes
@@ -422,17 +469,17 @@ function Trending({ columnMode, ...props }) {
           position="anchor"
           menuButton={
             <button type="button" class="plain">
-              <Icon icon="more" size="l" />
+              <Icon icon="more" size="l" alt={t`More`} />
             </button>
           }
         >
           <MenuItem
             onClick={() => {
               let newInstance = prompt(
-                'Enter a new instance e.g. "mastodon.social"',
+                t`Enter a new instance e.g. "mastodon.social"`,
               );
               if (!/\./.test(newInstance)) {
-                if (newInstance) alert('Invalid instance');
+                if (newInstance) alert(t`Invalid instance`);
                 return;
               }
               if (newInstance) {
@@ -442,7 +489,10 @@ function Trending({ columnMode, ...props }) {
               }
             }}
           >
-            <Icon icon="bus" /> <span>Go to another instance…</span>
+            <Icon icon="bus" />{' '}
+            <span>
+              <Trans>Go to another instance…</Trans>
+            </span>
           </MenuItem>
           {currentInstance !== instance && (
             <MenuItem
@@ -452,7 +502,9 @@ function Trending({ columnMode, ...props }) {
             >
               <Icon icon="bus" />{' '}
               <small class="menu-double-lines">
-                Go to my instance (<b>{currentInstance}</b>)
+                <Trans>
+                  Go to my instance (<b>{currentInstance}</b>)
+                </Trans>
               </small>
             </MenuItem>
           )}
