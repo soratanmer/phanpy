@@ -1,3 +1,4 @@
+import { Trans, useLingui } from '@lingui/react/macro';
 import { MenuDivider, MenuItem } from '@szhsin/react-menu';
 import { getBlurHashAverageColor } from 'fast-blurhash';
 import {
@@ -9,10 +10,11 @@ import {
 } from 'preact/hooks';
 import { useHotkeys } from 'react-hotkeys-hook';
 
-import { oklab2rgb, rgb2oklab } from '../utils/color-utils';
+import { oklch2rgb, rgb2oklch } from '../utils/color-utils';
 import isRTL from '../utils/is-rtl';
 import showToast from '../utils/show-toast';
 import states from '../utils/states';
+import store from '../utils/store';
 
 import Icon from './icon';
 import Link from './link';
@@ -30,6 +32,7 @@ function MediaModal({
   index = 0,
   onClose = () => {},
 }) {
+  const { t } = useLingui();
   const [uiState, setUIState] = useState('default');
   const carouselRef = useRef(null);
 
@@ -54,11 +57,11 @@ function MediaModal({
     const scrollLeft = index * carouselRef.current.clientWidth;
     const differentStatusID = prevStatusID.current !== statusID;
     if (differentStatusID) prevStatusID.current = statusID;
+    carouselRef.current.focus();
     carouselRef.current.scrollTo({
       left: scrollLeft * (isRTL() ? -1 : 1),
       behavior: differentStatusID ? 'auto' : 'smooth',
     });
-    carouselRef.current.focus();
   }, [index, statusID]);
 
   const [showControls, setShowControls] = useState(true);
@@ -114,39 +117,64 @@ function MediaModal({
     return () => clearTimeout(timer);
   }, []);
 
-  const mediaAccentColors = useMemo(() => {
+  const mediaOkColors = useMemo(() => {
     return mediaAttachments?.map((media) => {
       const { blurhash } = media;
       if (blurhash) {
         const averageColor = getBlurHashAverageColor(blurhash);
-        const labAverageColor = rgb2oklab(averageColor);
-        return oklab2rgb([0.6, labAverageColor[1], labAverageColor[2]]);
+        return rgb2oklch(averageColor);
       }
       return null;
     });
   }, [mediaAttachments]);
-  const mediaAccentGradient = useMemo(() => {
+  const mediaAccentColors = useMemo(() => {
+    return mediaOkColors?.map((okColor) => {
+      if (okColor) {
+        return {
+          light: oklch2rgb([0.95, 0.01, okColor[2]]),
+          dark: oklch2rgb([0.35, 0.01, okColor[2]]),
+          default: oklch2rgb([0.6, okColor[1], okColor[2]]),
+        };
+      }
+      return null;
+    });
+  });
+  const mediaAccentGradients = useMemo(() => {
     const gap = 5;
     const range = 100 / mediaAccentColors.length;
-    return (
-      mediaAccentColors
-        ?.map((color, i) => {
-          const start = i * range + gap;
-          const end = (i + 1) * range - gap;
-          if (color) {
-            return `
-            rgba(${color?.join(',')}, 0.4) ${start}%,
-            rgba(${color?.join(',')}, 0.4) ${end}%
-          `;
-          }
+    const colors = mediaAccentColors.map((color, i) => {
+      const start = i * range + gap;
+      const end = (i + 1) * range - gap;
+      if (color?.light && color?.dark) {
+        return {
+          light: `
+                rgb(${color.light?.join(',')}) ${start}%, 
+                rgb(${color.light?.join(',')}) ${end}%
+              `,
+          dark: `
+                rgb(${color.dark?.join(',')}) ${start}%, 
+                rgb(${color.dark?.join(',')}) ${end}%
+              `,
+        };
+      }
 
-          return `
-            transparent ${start}%,
-            transparent ${end}%
-          `;
-        })
-        ?.join(', ') || 'transparent'
-    );
+      return {
+        light: `
+              transparent ${start}%, 
+              transparent ${end}%
+            `,
+        dark: `
+              transparent ${start}%, 
+              transparent ${end}%
+            `,
+      };
+    });
+    const lightGradient = colors.map((color) => color.light).join(', ');
+    const darkGradient = colors.map((color) => color.dark).join(', ');
+    return {
+      light: lightGradient,
+      dark: darkGradient,
+    };
   }, [mediaAccentColors]);
 
   let toastRef = useRef(null);
@@ -155,6 +183,46 @@ function MediaModal({
       toastRef.current?.hideToast?.();
     };
   }, []);
+
+  useLayoutEffect(() => {
+    const currentColor = mediaAccentColors[currentIndex];
+    let $meta;
+    let metaColor;
+    if (currentColor) {
+      const theme = store.local.get('theme');
+      if (theme) {
+        const mediaColor = `rgb(${currentColor[theme].join(',')})`;
+        console.log({ mediaColor });
+        $meta = document.querySelector(
+          `meta[name="theme-color"][data-theme-setting="manual"]`,
+        );
+        if ($meta) {
+          metaColor = $meta.content;
+          $meta.content = mediaColor;
+        }
+      } else {
+        const colorScheme = window.matchMedia('(prefers-color-scheme: dark)')
+          .matches
+          ? 'dark'
+          : 'light';
+        const mediaColor = `rgb(${currentColor[colorScheme].join(',')})`;
+        console.log({ mediaColor });
+        $meta = document.querySelector(
+          `meta[name="theme-color"][media*="${colorScheme}"]`,
+        );
+        if ($meta) {
+          metaColor = $meta.content;
+          $meta.content = mediaColor;
+        }
+      }
+    }
+    return () => {
+      // Reset meta color
+      if ($meta && metaColor) {
+        $meta.content = metaColor;
+      }
+    };
+  }, [currentIndex, mediaAccentColors]);
 
   return (
     <div
@@ -178,8 +246,10 @@ function MediaModal({
           mediaAttachments.length > 1
             ? {
                 backgroundAttachment: 'local',
-                backgroundImage: `linear-gradient(
-            to ${isRTL() ? 'left' : 'right'}, ${mediaAccentGradient})`,
+                '--accent-gradient-light': mediaAccentGradients?.light,
+                '--accent-gradient-dark': mediaAccentGradients?.dark,
+                //     backgroundImage: `linear-gradient(
+                // to ${isRTL() ? 'left' : 'right'}, ${mediaAccentGradient})`,
               }
             : {}
         }
@@ -193,8 +263,14 @@ function MediaModal({
               style={
                 accentColor
                   ? {
-                      '--accent-color': `rgb(${accentColor?.join(',')})`,
-                      '--accent-alpha-color': `rgba(${accentColor?.join(
+                      '--accent-color': `rgb(${accentColor.default.join(',')})`,
+                      '--accent-light-color': `rgb(${accentColor.light?.join(
+                        ',',
+                      )})`,
+                      '--accent-dark-color': `rgb(${accentColor.dark?.join(
+                        ',',
+                      )})`,
+                      '--accent-alpha-color': `rgba(${accentColor.default.join(
                         ',',
                       )}, 0.4)`,
                     }
@@ -243,7 +319,7 @@ function MediaModal({
             class="carousel-button"
             onClick={() => onClose()}
           >
-            <Icon icon="x" />
+            <Icon icon="x" alt={t`Close`} />
           </button>
         </span>
         {mediaAttachments?.length > 1 ? (
@@ -257,15 +333,13 @@ function MediaModal({
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  carouselRef.current.scrollTo({
-                    left:
-                      carouselRef.current.clientWidth * i * (isRTL() ? -1 : 1),
-                    behavior: 'smooth',
-                  });
+                  const left =
+                    carouselRef.current.clientWidth * i * (isRTL() ? -1 : 1);
                   carouselRef.current.focus();
+                  carouselRef.current.scrollTo({ left, behavior: 'smooth' });
                 }}
               >
-                <Icon icon="round" size="s" />
+                <Icon icon="round" size="s" alt="⸱" />
               </button>
             ))}
           </span>
@@ -281,7 +355,7 @@ function MediaModal({
             menuClassName="glass-menu"
             menuButton={
               <button type="button" class="carousel-button">
-                <Icon icon="more" alt="More" />
+                <Icon icon="more" alt={t`More`} />
               </button>
             }
           >
@@ -292,10 +366,12 @@ function MediaModal({
               }
               class="carousel-button"
               target="_blank"
-              title="Open original media in new window"
+              title={t`Open original media in new window`}
             >
               <Icon icon="popout" />
-              <span>Open original media</span>
+              <span>
+                <Trans>Open original media</Trans>
+              </span>
             </MenuLink>
             {import.meta.env.DEV && // Only dev for now
               !!states.settings.mediaAltGenerator &&
@@ -310,7 +386,7 @@ function MediaModal({
                     onClick={() => {
                       setUIState('loading');
                       toastRef.current = showToast({
-                        text: 'Attempting to describe image. Please wait...',
+                        text: t`Attempting to describe image. Please wait…`,
                         duration: -1,
                       });
                       (async function () {
@@ -325,7 +401,7 @@ function MediaModal({
                           };
                         } catch (e) {
                           console.error(e);
-                          showToast('Failed to describe image');
+                          showToast(t`Failed to describe image`);
                         } finally {
                           setUIState('default');
                           toastRef.current?.hideToast?.();
@@ -334,29 +410,36 @@ function MediaModal({
                     }}
                   >
                     <Icon icon="sparkles2" />
-                    <span>Describe image…</span>
+                    <span>
+                      <Trans>Describe image…</Trans>
+                    </span>
                   </MenuItem>
                 </>
               )}
           </Menu2>{' '}
-          <Link
-            to={`${instance ? `/${instance}` : ''}/s/${statusID}${
-              window.matchMedia('(min-width: calc(40em + 350px))').matches
-                ? `?media=${currentIndex + 1}`
-                : ''
-            }`}
-            class="button carousel-button media-post-link"
-            // onClick={() => {
-            //   // if small screen (not media query min-width 40em + 350px), run onClose
-            //   if (
-            //     !window.matchMedia('(min-width: calc(40em + 350px))').matches
-            //   ) {
-            //     onClose();
-            //   }
-            // }}
-          >
-            <span class="button-label">View post </span>&raquo;
-          </Link>
+          {!!statusID && (
+            <Link
+              to={`${instance ? `/${instance}` : ''}/s/${statusID}${
+                window.matchMedia('(min-width: calc(40em + 350px))').matches
+                  ? `?media=${currentIndex + 1}`
+                  : ''
+              }`}
+              class="button carousel-button media-post-link"
+              // onClick={() => {
+              //   // if small screen (not media query min-width 40em + 350px), run onClose
+              //   if (
+              //     !window.matchMedia('(min-width: calc(40em + 350px))').matches
+              //   ) {
+              //     onClose();
+              //   }
+              // }}
+            >
+              <span class="button-label">
+                <Trans>View post</Trans>{' '}
+              </span>
+              &raquo;
+            </Link>
+          )}
         </span>
       </div>
       {mediaAttachments?.length > 1 && (
@@ -378,7 +461,7 @@ function MediaModal({
               });
             }}
           >
-            <Icon icon="arrow-left" />
+            <Icon icon="arrow-left" alt={t`Previous`} />
           </button>
           <button
             type="button"
@@ -397,7 +480,7 @@ function MediaModal({
               });
             }}
           >
-            <Icon icon="arrow-right" />
+            <Icon icon="arrow-right" alt={t`Next`} />
           </button>
         </div>
       )}

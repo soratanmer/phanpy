@@ -115,21 +115,31 @@ export function getCurrentInstance() {
   }
 }
 
+let currentNodeInfo = null;
+export function getCurrentNodeInfo() {
+  if (currentNodeInfo) return currentNodeInfo;
+  try {
+    const account = getCurrentAccount();
+    const nodeInfos = store.local.getJSON('nodeInfos') || {};
+    const instanceURL = account.instanceURL.toLowerCase();
+    return (currentNodeInfo = nodeInfos[instanceURL] || {});
+  } catch (e) {
+    console.error(e);
+    return {};
+  }
+}
+
 // Massage these instance configurations to match the Mastodon API
 // - Pleroma
 function getInstanceConfiguration(instance) {
-  const {
-    configuration,
-    maxMediaAttachments,
-    maxTootChars,
-    pleroma,
-    pollLimits,
-  } = instance;
+  const { configuration, maxMediaAttachments, maxTootChars, pollLimits } =
+    instance;
 
   const statuses = configuration?.statuses || {};
   if (maxMediaAttachments) {
     statuses.maxMediaAttachments ??= maxMediaAttachments;
   }
+
   if (maxTootChars) {
     statuses.maxCharacters ??= maxTootChars;
   }
@@ -152,6 +162,13 @@ function getInstanceConfiguration(instance) {
 export function getCurrentInstanceConfiguration() {
   const instance = getCurrentInstance();
   return getInstanceConfiguration(instance);
+}
+
+export function getVapidKey() {
+  // Vapid key has moved from account to instance config
+  const config = getCurrentInstanceConfiguration();
+  const vapidKey = config?.vapid?.publicKey || config?.vapid?.public_key;
+  return vapidKey || getCurrentAccount()?.vapidKey;
 }
 
 export function isMediaFirstInstance() {
