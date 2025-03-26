@@ -1,5 +1,6 @@
 import './shortcuts.css';
 
+import { Trans, useLingui } from '@lingui/react/macro';
 import { MenuDivider } from '@szhsin/react-menu';
 import { memo } from 'preact/compat';
 import { useRef, useState } from 'preact/hooks';
@@ -20,6 +21,7 @@ import Menu2 from './menu2';
 import SubMenu2 from './submenu2';
 
 function Shortcuts() {
+  const { t, _ } = useLingui();
   const { instance } = api();
   const snapStates = useSnapshot(states);
   const { shortcuts, settings } = snapStates;
@@ -27,10 +29,10 @@ function Shortcuts() {
   if (!shortcuts.length) {
     return null;
   }
-  if (
+  const isMultiColumnMode =
     settings.shortcutsViewMode === 'multi-column' ||
-    (!settings.shortcutsViewMode && settings.shortcutsColumnsMode)
-  ) {
+    (!settings.shortcutsViewMode && settings.shortcutsColumnsMode);
+  if (isMultiColumnMode) {
     return null;
   }
 
@@ -57,9 +59,13 @@ function Shortcuts() {
       }
       if (typeof title === 'function') {
         title = title(data, i);
+      } else {
+        title = _(title);
       }
       if (typeof subtitle === 'function') {
         subtitle = subtitle(data, i);
+      } else {
+        subtitle = _(subtitle);
       }
       if (typeof icon === 'function') {
         icon = icon(data, i);
@@ -80,16 +86,22 @@ function Shortcuts() {
     .filter(Boolean);
 
   const navigate = useNavigate();
-  useHotkeys(['1', '2', '3', '4', '5', '6', '7', '8', '9'], (e, handler) => {
-    const index = parseInt(handler.keys[0], 10) - 1;
-    if (index < formattedShortcuts.length) {
-      const { path } = formattedShortcuts[index];
-      if (path) {
-        navigate(path);
-        menuRef.current?.closeMenu?.();
+  useHotkeys(
+    ['1', '2', '3', '4', '5', '6', '7', '8', '9'],
+    (e, handler) => {
+      const index = parseInt(handler.keys[0], 10) - 1;
+      if (index < formattedShortcuts.length) {
+        const { path } = formattedShortcuts[index];
+        if (path) {
+          navigate(path);
+          menuRef.current?.closeMenu?.();
+        }
       }
-    }
-  });
+    },
+    {
+      enabled: !isMultiColumnMode,
+    },
+  );
 
   const [lists, setLists] = useState([]);
 
@@ -176,7 +188,7 @@ function Shortcuts() {
                 } catch (e) {}
               }}
             >
-              <Icon icon="shortcut" size="xl" alt="Shortcuts" />
+              <Icon icon="shortcut" size="xl" alt={t`Shortcuts`} />
             </button>
           }
         >
@@ -198,7 +210,9 @@ function Shortcuts() {
                   }
                 >
                   <MenuLink to="/l">
-                    <span>All Lists</span>
+                    <span>
+                      <Trans>All Lists</Trans>
+                    </span>
                   </MenuLink>
                   <MenuDivider />
                   {lists?.map((list) => (
