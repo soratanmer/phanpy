@@ -1,10 +1,15 @@
 import './translation-block.css';
 
+import { Trans, useLingui } from '@lingui/react/macro';
 import pRetry from 'p-retry';
 import pThrottle from 'p-throttle';
 import { useEffect, useRef, useState } from 'preact/hooks';
 
 import sourceLanguages from '../data/lingva-source-languages';
+import {
+  translate as browserTranslate,
+  supportsBrowserTranslator,
+} from '../utils/browser-translator';
 import getTranslateTargetLanguage from '../utils/get-translate-target-language';
 import localeCode2Text from '../utils/localeCode2Text';
 import pmem from '../utils/pmem';
@@ -79,6 +84,7 @@ function TranslationBlock({
   mini,
   autoDetected,
 }) {
+  const { t } = useLingui();
   const targetLang = getTranslateTargetLanguage(true);
   const [uiState, setUIState] = useState('default');
   const [pronunciationContent, setPronunciationContent] = useState(null);
@@ -93,7 +99,22 @@ function TranslationBlock({
   const apiSourceLang = useRef('auto');
 
   if (!onTranslate) {
-    onTranslate = mini ? throttledLingvaTranslate : lingvaTranslate;
+    // onTranslate = supportsBrowserTranslator
+    //   ? browserTranslate
+    //   : mini
+    //     ? throttledLingvaTranslate
+    //     : lingvaTranslate;
+    onTranslate = async (...args) => {
+      if (supportsBrowserTranslator) {
+        const result = await browserTranslate(...args);
+        if (result && !result.error) {
+          return result;
+        }
+      }
+      return mini
+        ? await throttledLingvaTranslate(...args)
+        : await lingvaTranslate(...args);
+    };
   }
 
   const translate = async () => {
@@ -148,7 +169,7 @@ function TranslationBlock({
           <div class="status-translation-block-mini">
             <Icon
               icon="translate"
-              alt={`Auto-translated from ${sourceLangText}`}
+              alt={t`Auto-translated from ${sourceLangText}`}
             />
             <output
               lang={targetLang}
@@ -186,12 +207,12 @@ function TranslationBlock({
             <Icon icon="translate" />{' '}
             <span>
               {uiState === 'loading'
-                ? 'Translating…'
+                ? t`Translating…`
                 : sourceLanguage && sourceLangText && !detectedLang
-                ? autoDetected
-                  ? `Translate from ${sourceLangText} (auto-detected)`
-                  : `Translate from ${sourceLangText}`
-                : `Translate`}
+                  ? autoDetected
+                    ? t`Translate from ${sourceLangText} (auto-detected)`
+                    : t`Translate from ${sourceLangText}`
+                  : t`Translate`}
             </span>
           </button>
         </summary>
@@ -205,17 +226,34 @@ function TranslationBlock({
                 translate();
               }}
             >
-              {sourceLanguages.map((l) => (
-                <option value={l.code}>
-                  {l.code === 'auto' ? `Auto (${detectedLang ?? '…'})` : l.name}
-                </option>
-              ))}
+              {sourceLanguages.map((l) => {
+                const common = localeCode2Text({
+                  code: l.code,
+                  fallback: l.name,
+                });
+                const native = localeCode2Text({
+                  code: l.code,
+                  locale: l.code,
+                });
+                const showCommon = common !== native;
+                return (
+                  <option value={l.code}>
+                    {l.code === 'auto'
+                      ? t`Auto (${detectedLang ?? '…'})`
+                      : showCommon
+                        ? `${native} - ${common}`
+                        : native}
+                  </option>
+                );
+              })}
             </select>{' '}
             <span>→ {targetLangText}</span>
             <Loader abrupt hidden={uiState !== 'loading'} />
           </div>
           {uiState === 'error' ? (
-            <p class="ui-state">Failed to translate</p>
+            <p class="ui-state">
+              <Trans>Failed to translate</Trans>
+            </p>
           ) : (
             !!translatedContent && (
               <>
