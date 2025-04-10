@@ -1,3 +1,4 @@
+import { Trans, useLingui } from '@lingui/react/macro';
 import { getBlurHashAverageColor } from 'fast-blurhash';
 import { Fragment } from 'preact';
 import { memo } from 'preact/compat';
@@ -31,6 +32,7 @@ audio = Audio track
 
 const dataAltLabel = 'ALT';
 const AltBadge = (props) => {
+  const { t } = useLingui();
   const { alt, lang, index, ...rest } = props;
   if (!alt || !alt.trim()) return null;
   return (
@@ -46,7 +48,7 @@ const AltBadge = (props) => {
           lang,
         };
       }}
-      title="Media description"
+      title={t`Media description`}
     >
       {dataAltLabel}
       {!!index && <sup>{index}</sup>}
@@ -73,6 +75,7 @@ function Media({
   showCaption,
   allowLongerCaption,
   altIndex,
+  checkAspectRatio = true,
   onClick = () => {},
 }) {
   let {
@@ -162,9 +165,12 @@ function Media({
     onUpdate,
   };
 
+  const [mediaLoadError, setMediaLoadError] = useState(false);
+
   const Parent = useMemo(
-    () => (to ? (props) => <Link to={to} {...props} /> : 'div'),
-    [to],
+    () =>
+      to && !mediaLoadError ? (props) => <Link to={to} {...props} /> : 'div',
+    [to, mediaLoadError],
   );
 
   const remoteMediaURLObj = remoteMediaURL ? getURLObj(remoteMediaURL) : null;
@@ -353,7 +359,7 @@ function Media({
                   }
 
                   // Check natural aspect ratio vs display aspect ratio
-                  if ($media) {
+                  if (checkAspectRatio && $media) {
                     const {
                       clientWidth,
                       clientHeight,
@@ -389,6 +395,8 @@ function Media({
                   const { src } = e.target;
                   if (src === mediaURL && mediaURL !== remoteMediaURL) {
                     e.target.src = remoteMediaURL;
+                  } else {
+                    setMediaLoadError(true);
                   }
                 }}
               />
@@ -398,6 +406,16 @@ function Media({
             </>
           )}
         </Parent>
+        {mediaLoadError && (
+          <div>
+            <a href={remoteUrl} class="button plain6 small" target="_blank">
+              <Icon icon="external" />{' '}
+              <span>
+                <Trans>Open file</Trans>
+              </span>
+            </a>
+          </div>
+        )}
       </Figure>
     );
   } else if (type === 'gifv' || type === 'video' || isVideoMaybe) {
@@ -615,7 +633,7 @@ function Media({
                 />
               )}
               <div class="media-play">
-                <Icon icon="play" size="xl" />
+                <Icon icon="play" size="xl" alt="▶" />
               </div>
             </>
           )}
@@ -659,7 +677,7 @@ function Media({
           {!showOriginal && (
             <>
               <div class="media-play">
-                <Icon icon="play" size="xl" />
+                <Icon icon="play" size="xl" alt="▶" />
               </div>
               {!showInlineDesc && (
                 <AltBadge alt={description} lang={lang} index={altIndex} />

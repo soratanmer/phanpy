@@ -1,3 +1,4 @@
+import { Trans } from '@lingui/react/macro';
 import { useLayoutEffect, useState } from 'preact/hooks';
 import { useLocation } from 'react-router-dom';
 
@@ -63,18 +64,22 @@ export default function HttpRoute() {
       {uiState === 'loading' ? (
         <>
           <Loader abrupt />
-          <h2>Resolving…</h2>
+          <h2>
+            <Trans>Resolving…</Trans>
+          </h2>
           <p>
-            <a href={url} target="_blank" rel="noopener noreferrer">
+            <a href={url} target="_blank" rel="noopener">
               {url}
             </a>
           </p>
         </>
       ) : (
         <>
-          <h2>Unable to resolve URL</h2>
+          <h2>
+            <Trans>Unable to resolve URL</Trans>
+          </h2>
           <p>
-            <a href={url} target="_blank" rel="noopener noreferrer">
+            <a href={url} target="_blank" rel="noopener">
               {url}
             </a>
           </p>
@@ -82,7 +87,9 @@ export default function HttpRoute() {
       )}
       <hr />
       <p>
-        <Link to="/">Go home</Link>
+        <Link to="/">
+          <Trans>Go home</Trans>
+        </Link>
       </p>
     </div>
   );

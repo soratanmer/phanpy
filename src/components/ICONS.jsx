@@ -174,4 +174,9 @@ export const ICONS = {
   'heart-break': () => import('@iconify-icons/mingcute/heart-crack-line'),
   'user-x': () => import('@iconify-icons/mingcute/user-x-line'),
   minimize: () => import('@iconify-icons/mingcute/arrows-down-line'),
+  celebrate: () => import('@iconify-icons/mingcute/celebrate-line'),
+  schedule: () => import('@iconify-icons/mingcute/calendar-time-add-line'),
+  month: () => import('@iconify-icons/mingcute/calendar-month-line'),
+  day: () => import('@iconify-icons/mingcute/calendar-day-line'),
+  camera: () => import('@iconify-icons/mingcute/camera-line'),
 };
