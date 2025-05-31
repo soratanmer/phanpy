@@ -1,3 +1,4 @@
+import { Trans, useLingui } from '@lingui/react/macro';
 import { MenuItem } from '@szhsin/react-menu';
 import {
   useCallback,
@@ -39,7 +40,7 @@ const supportsInputMonth = (() => {
 
 async function _isSearchEnabled(instance) {
   const { masto } = api({ instance });
-  const results = await masto.v2.search.fetch({
+  const results = await masto.v2.search.list({
     q: 'from:me',
     type: 'statuses',
     limit: 1,
@@ -49,6 +50,7 @@ async function _isSearchEnabled(instance) {
 const isSearchEnabled = pmem(_isSearchEnabled);
 
 function AccountStatuses() {
+  const { i18n, t } = useLingui();
   const snapStates = useSnapshot(states);
   const { id, ...params } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -135,7 +137,7 @@ function AccountStatuses() {
         searchOffsetRef.current += LIMIT;
       }
 
-      const searchResults = await masto.v2.search.fetch({
+      const searchResults = await masto.v2.search.list({
         q: `from:${account.acct} after:${afterStr} before:${beforeStr}`,
         type: 'statuses',
         limit,
@@ -160,6 +162,7 @@ function AccountStatuses() {
         .statuses.list({
           pinned: true,
         })
+        .values()
         .next();
       if (value?.length && !tagged && !media) {
         const pinnedStatuses = value.map((status) => {
@@ -190,7 +193,8 @@ function AccountStatuses() {
           exclude_reblogs: excludeBoosts,
           only_media: media || undefined,
           tagged,
-        });
+        })
+        .values();
     }
     const { value, done } = await accountStatusesIterator.current.next();
     if (value?.length) {
@@ -227,40 +231,34 @@ function AccountStatuses() {
   }
 
   const [featuredTags, setFeaturedTags] = useState([]);
-  useTitle(
-    account?.acct
-      ? `${
-          account?.displayName
-            ? `${account.displayName} (${/@/.test(account.acct) ? '' : '@'}${
-                account.acct
-              })`
-            : `${/@/.test(account.acct) ? '' : '@'}${account.acct}`
-        }${
-          !excludeReplies
-            ? ' (+ Replies)'
-            : excludeBoosts
-            ? ' (- Boosts)'
-            : tagged
-            ? ` (#${tagged})`
-            : media
-            ? ' (Media)'
-            : month
-            ? ` (${new Date(month).toLocaleString('default', {
-                month: 'long',
-                year: 'numeric',
-              })})`
-            : ''
-        }`
-      : 'Account posts',
-    '/:instance?/a/:id',
-  );
+  let title = t`Account posts`;
+  if (account?.acct) {
+    const acctDisplay = (/@/.test(account.acct) ? '' : '@') + account.acct;
+    const accountDisplay = account?.displayName
+      ? `${account.displayName} (${acctDisplay})`
+      : `${acctDisplay}`;
+    if (!excludeReplies) {
+      title = t`${accountDisplay} (+ Replies)`;
+    } else if (excludeBoosts) {
+      title = t`${accountDisplay} (- Boosts)`;
+    } else if (tagged) {
+      title = t`${accountDisplay} (#${tagged})`;
+    } else if (media) {
+      title = t`${accountDisplay} (Media)`;
+    } else if (month) {
+      const monthYear = new Date(month).toLocaleString(i18n.locale, {
+        month: 'long',
+        year: 'numeric',
+      });
+      title = t`${accountDisplay} (${monthYear})`;
+    } else {
+      title = accountDisplay;
+    }
+  }
+  useTitle(title, '/:instance?/a/:id');
 
-  const fetchAccountPromiseRef = useRef();
   const fetchAccount = useCallback(() => {
-    const fetchPromise =
-      fetchAccountPromiseRef.current || masto.v1.accounts.$select(id).fetch();
-    fetchAccountPromiseRef.current = fetchPromise;
-    return fetchPromise;
+    return memFetchAccount(id, masto);
   }, [id, masto]);
 
   useEffect(() => {
@@ -304,6 +302,7 @@ function AccountStatuses() {
           fetchAccount={fetchAccount}
           authenticated={authenticated}
           standalone
+          showEndorsements
         />
         {!mediaFirst && (
           <div
@@ -317,46 +316,51 @@ function AccountStatuses() {
               <Link
                 to={`/${instance}/a/${id}`}
                 class="insignificant filter-clear"
-                title="Clear filters"
+                title={t`Clear filters`}
                 key="clear-filters"
               >
-                <Icon icon="x" size="l" />
+                <Icon icon="x" size="l" alt={t`Clear`} />
               </Link>
             ) : (
-              <Icon icon="filter" class="insignificant" size="l" />
+              <Icon
+                icon="filter"
+                class="insignificant"
+                size="l"
+                alt={t`Filters`}
+              />
             )}
             <Link
               to={`/${instance}/a/${id}${excludeReplies ? '?replies=1' : ''}`}
               onClick={() => {
                 if (excludeReplies) {
-                  showToast('Showing post with replies');
+                  showToast(t`Showing post with replies`);
                 }
               }}
               class={excludeReplies ? '' : 'is-active'}
             >
-              + Replies
+              <Trans>+ Replies</Trans>
             </Link>
             <Link
               to={`/${instance}/a/${id}${excludeBoosts ? '' : '?boosts=0'}`}
               onClick={() => {
                 if (!excludeBoosts) {
-                  showToast('Showing posts without boosts');
+                  showToast(t`Showing posts without boosts`);
                 }
               }}
               class={!excludeBoosts ? '' : 'is-active'}
             >
-              - Boosts
+              <Trans>- Boosts</Trans>
             </Link>
             <Link
               to={`/${instance}/a/${id}${media ? '' : '?media=1'}`}
               onClick={() => {
                 if (!media) {
-                  showToast('Showing posts with media');
+                  showToast(t`Showing posts with media`);
                 }
               }}
               class={media ? 'is-active' : ''}
             >
-              Media
+              <Trans>Media</Trans>
             </Link>
             {featuredTags.map((tag) => (
               <Link
@@ -368,7 +372,7 @@ function AccountStatuses() {
                 }`}
                 onClick={() => {
                   if (tagged !== tag.name) {
-                    showToast(`Showing posts tagged with #${tag.name}`);
+                    showToast(t`Showing posts tagged with #${tag.name}`);
                   }
                 }}
                 class={tagged === tag.name ? 'is-active' : ''}
@@ -407,7 +411,7 @@ function AccountStatuses() {
                       const monthIndex = parseInt(month, 10) - 1;
                       const date = new Date(year, monthIndex);
                       showToast(
-                        `Showing posts in ${date.toLocaleString('default', {
+                        t`Showing posts in ${date.toLocaleString(i18n.locale, {
                           month: 'long',
                           year: 'numeric',
                         })}`,
@@ -466,124 +470,141 @@ function AccountStatuses() {
 
   const accountInstance = useMemo(() => {
     if (!account?.url) return null;
-    const domain = URL.parse(account.url).hostname;
+    const domain = URL.parse(account.url)?.hostname;
     return domain;
   }, [account]);
   const sameInstance = instance === accountInstance;
   const allowSwitch = !!account && !sameInstance;
 
   return (
-    <Timeline
-      key={id}
-      title={`${account?.acct ? '@' + account.acct : 'Posts'}`}
-      titleComponent={
-        <h1
-          class="header-double-lines header-account"
-          // onClick={() => {
-          //   states.showAccount = {
-          //     account,
-          //     instance,
-          //   };
-          // }}
-        >
-          <b>
-            <EmojiText text={displayName} emojis={emojis} />
-          </b>
-          <div>
-            <span>@{acct}</span>
-          </div>
-        </h1>
-      }
-      id="account-statuses"
-      instance={instance}
-      emptyText="Nothing to see here yet."
-      errorText="Unable to load posts"
-      fetchItems={fetchAccountStatuses}
-      useItemID
-      view={media || mediaFirst ? 'media' : undefined}
-      boostsCarousel={snapStates.settings.boostsCarousel}
-      timelineStart={TimelineStart}
-      refresh={[
-        excludeReplies,
-        excludeBoosts,
-        tagged,
-        media,
-        month + account?.acct,
-      ].toString()}
-      headerEnd={
-        <Menu2
-          portal
-          // setDownOverflow
-          overflow="auto"
-          viewScroll="close"
-          position="anchor"
-          menuButton={
-            <button type="button" class="plain">
-              <Icon icon="more" size="l" />
-            </button>
-          }
-        >
-          <MenuItem
-            disabled={!allowSwitch}
-            onClick={() => {
-              (async () => {
-                try {
-                  const { masto } = api({
-                    instance: accountInstance,
-                  });
-                  const acc = await masto.v1.accounts.lookup({
-                    acct: account.acct,
-                  });
-                  const { id } = acc;
-                  location.hash = `/${accountInstance}/a/${id}`;
-                } catch (e) {
-                  console.error(e);
-                  alert('Unable to fetch account info');
-                }
-              })();
-            }}
+    <>
+      <Timeline
+        key={id}
+        title={`${account?.acct ? '@' + account.acct : t`Posts`}`}
+        titleComponent={
+          <h1
+            class="header-double-lines header-account"
+            // onClick={() => {
+            //   states.showAccount = {
+            //     account,
+            //     instance,
+            //   };
+            // }}
           >
-            <Icon icon="transfer" />{' '}
-            <small class="menu-double-lines">
-              Switch to account's instance{' '}
-              {accountInstance ? (
-                <>
-                  {' '}
-                  (<b>{punycode.toUnicode(accountInstance)}</b>)
-                </>
-              ) : null}
-            </small>
-          </MenuItem>
-          {!sameCurrentInstance && (
+            <b>
+              <EmojiText text={displayName} emojis={emojis} />
+            </b>
+            <div>
+              <span class="bidi-isolate">@{acct}</span>
+            </div>
+          </h1>
+        }
+        id="account-statuses"
+        instance={instance}
+        emptyText={t`Nothing to see here yet.`}
+        errorText={t`Unable to load posts`}
+        fetchItems={fetchAccountStatuses}
+        useItemID
+        view={media || mediaFirst ? 'media' : undefined}
+        boostsCarousel={snapStates.settings.boostsCarousel}
+        timelineStart={TimelineStart}
+        refresh={[
+          excludeReplies,
+          excludeBoosts,
+          tagged,
+          media,
+          month + account?.acct,
+        ].toString()}
+        headerEnd={
+          <Menu2
+            portal
+            // setDownOverflow
+            overflow="auto"
+            viewScroll="close"
+            position="anchor"
+            menuButton={
+              <button type="button" class="plain">
+                <Icon icon="more" size="l" alt={t`More`} />
+              </button>
+            }
+          >
             <MenuItem
+              disabled={!allowSwitch}
               onClick={() => {
                 (async () => {
                   try {
-                    const acc = await currentMasto.v1.accounts.lookup({
-                      acct: account.acct + '@' + instance,
+                    const { masto } = api({
+                      instance: accountInstance,
+                    });
+                    const acc = await masto.v1.accounts.lookup({
+                      acct: account.acct,
                     });
                     const { id } = acc;
-                    location.hash = `/${currentInstance}/a/${id}`;
+                    location.hash = `/${accountInstance}/a/${id}`;
                   } catch (e) {
                     console.error(e);
-                    alert('Unable to fetch account info');
+                    alert(t`Unable to fetch account info`);
                   }
                 })();
               }}
             >
               <Icon icon="transfer" />{' '}
               <small class="menu-double-lines">
-                Switch to my instance (<b>{currentInstance}</b>)
+                <Trans>
+                  Switch to account's instance{' '}
+                  {accountInstance ? (
+                    <>
+                      {' '}
+                      (<b>{punycode.toUnicode(accountInstance)}</b>)
+                    </>
+                  ) : null}
+                </Trans>
               </small>
             </MenuItem>
-          )}
-        </Menu2>
-      }
-    />
+            {!sameCurrentInstance && (
+              <MenuItem
+                onClick={() => {
+                  (async () => {
+                    try {
+                      const acc = await currentMasto.v1.accounts.lookup({
+                        acct: account.acct + '@' + instance,
+                      });
+                      const { id } = acc;
+                      location.hash = `/${currentInstance}/a/${id}`;
+                    } catch (e) {
+                      console.error(e);
+                      alert(t`Unable to fetch account info`);
+                    }
+                  })();
+                }}
+              >
+                <Icon icon="transfer" />{' '}
+                <small class="menu-double-lines">
+                  <Trans>
+                    Switch to my instance (<b>{currentInstance}</b>)
+                  </Trans>
+                </small>
+              </MenuItem>
+            )}
+          </Menu2>
+        }
+      />
+      {acct && (
+        <data
+          class="compose-data"
+          value={JSON.stringify({
+            draftStatus: {
+              status: `@${acct} `,
+            },
+          })}
+        />
+      )}
+    </>
   );
 }
 
 function MonthPicker(props) {
+  const { i18n } = useLingui();
   const {
     class: className,
     disabled,
@@ -631,7 +652,9 @@ function MonthPicker(props) {
           });
         }}
       >
-        <option value="">Month</option>
+        <option value="">
+          <Trans>Month</Trans>
+        </option>
         <option disabled>-----</option>
         {Array.from({ length: 12 }, (_, i) => (
           <option
@@ -641,7 +664,7 @@ function MonthPicker(props) {
             }
             key={i}
           >
-            {new Date(0, i).toLocaleString('default', {
+            {new Date(0, i).toLocaleString(i18n.locale, {
               month: 'long',
             })}
           </option>
@@ -678,5 +701,12 @@ function MonthPicker(props) {
     </div>
   );
 }
+
+function fetchAccount(id, masto) {
+  return masto.v1.accounts.$select(id).fetch();
+}
+const memFetchAccount = pmem(fetchAccount, {
+  maxAge: 30 * 60 * 1000, // 30 minutes
+});
 
 export default AccountStatuses;
