@@ -146,6 +146,7 @@ export const ICONS = {
   },
   'account-edit': () => import('@iconify-icons/mingcute/user-edit-line'),
   'account-warning': () => import('@iconify-icons/mingcute/user-warning-line'),
+  'account-add': () => import('@iconify-icons/mingcute/user-add-2-line'),
   keyboard: () => import('@iconify-icons/mingcute/keyboard-line'),
   cloud: () => import('@iconify-icons/mingcute/cloud-line'),
   month: {
@@ -174,4 +175,12 @@ export const ICONS = {
   'heart-break': () => import('@iconify-icons/mingcute/heart-crack-line'),
   'user-x': () => import('@iconify-icons/mingcute/user-x-line'),
   minimize: () => import('@iconify-icons/mingcute/arrows-down-line'),
+  celebrate: () => import('@iconify-icons/mingcute/celebrate-line'),
+  schedule: () => import('@iconify-icons/mingcute/calendar-time-add-line'),
+  day: () => import('@iconify-icons/mingcute/calendar-day-line'),
+  camera: () => import('@iconify-icons/mingcute/camera-line'),
+  endorsement: {
+    module: () => import('@iconify-icons/mingcute/user-star-line'),
+    rtl: true,
+  },
 };
