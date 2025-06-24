@@ -343,7 +343,8 @@
         filter: none;
 
         .avatar {
-          box-shadow: 0 0 0 0.5px var(--bg-color),
+          box-shadow:
+            0 0 0 0.5px var(--bg-color),
             0 0 0 3px var(--link-faded-color) !important;
 
           img {
@@ -372,7 +373,9 @@
         filter: none;
 
         .avatar {
-          box-shadow: 0 0 0 1px var(--bg-color), 0 0 0 3px var(--link-color);
+          box-shadow:
+            0 0 0 1px var(--bg-color),
+            0 0 0 3px var(--link-color);
         }
 
         .username {
@@ -526,7 +529,8 @@
         position: relative;
         z-index: 1;
         background-color: var(--bg-faded-color);
-        box-shadow: 0 8px 16px -8px var(--drop-shadow-color),
+        box-shadow:
+          0 8px 16px -8px var(--drop-shadow-color),
           inset 0 1px var(--bg-color);
         text-shadow: 0 1px var(--bg-color);
       }
@@ -666,6 +670,7 @@
         black calc(100% - 1em),
         transparent 100%
       );
+      padding-top: 0.1em;
 
       @media (min-width: 40em) {
         --width: 25vw;
@@ -697,7 +702,7 @@
 
   &:is(.catchup-group-account, .catchup-selected-author):is(
       .catchup-filter-original,
-      .catchup-filter-reply
+      .catchup-filter-replies
     )
     > li {
     margin-bottom: 0;
@@ -780,6 +785,15 @@
 
         br {
           content: ' ';
+          display: inline;
+
+          + br,
+          + br + br,
+          + br + br + br,
+          + br + br + br + br,
+          + br + br + br + br + br {
+            display: none;
+          }
         }
 
         /* all block level elements */
