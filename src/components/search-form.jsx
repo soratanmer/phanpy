@@ -1,3 +1,4 @@
+import { Trans, useLingui } from '@lingui/react/macro';
 import { forwardRef } from 'preact/compat';
 import { useImperativeHandle, useRef, useState } from 'preact/hooks';
 import { useSearchParams } from 'react-router-dom';
@@ -8,6 +9,7 @@ import Icon from './icon';
 import Link from './link';
 
 const SearchForm = forwardRef((props, ref) => {
+  const { t } = useLingui();
   const { instance } = api();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchMenuOpen, setSearchMenuOpen] = useState(false);
@@ -68,7 +70,7 @@ const SearchForm = forwardRef((props, ref) => {
         name="q"
         type="search"
         // autofocus
-        placeholder="Search"
+        placeholder={t`Search`}
         dir="auto"
         autocomplete="off"
         autocorrect="off"
@@ -198,12 +200,12 @@ const SearchForm = forwardRef((props, ref) => {
           [
             {
               label: (
-                <>
+                <Trans>
                   {query}{' '}
                   <small class="insignificant">
                     ‒ accounts, hashtags &amp; posts
                   </small>
-                </>
+                </Trans>
               ),
               to: `/search?q=${encodeURIComponent(query)}`,
               top: !type && !/\s/.test(query),
@@ -211,9 +213,9 @@ const SearchForm = forwardRef((props, ref) => {
             },
             {
               label: (
-                <>
+                <Trans>
                   Posts with <q>{query}</q>
-                </>
+                </Trans>
               ),
               to: `/search?q=${encodeURIComponent(query)}&type=statuses`,
               hidden: /^https?:/.test(query),
@@ -223,9 +225,9 @@ const SearchForm = forwardRef((props, ref) => {
             },
             {
               label: (
-                <>
+                <Trans>
                   Posts tagged with <mark>#{query.replace(/^#/, '')}</mark>
-                </>
+                </Trans>
               ),
               to: `/${instance}/t/${query.replace(/^#/, '')}`,
               hidden:
@@ -237,9 +239,9 @@ const SearchForm = forwardRef((props, ref) => {
             },
             {
               label: (
-                <>
+                <Trans>
                   Look up <mark>{query}</mark>
-                </>
+                </Trans>
               ),
               to: `/${query}`,
               hidden: !/^https?:/.test(query),
@@ -248,9 +250,9 @@ const SearchForm = forwardRef((props, ref) => {
             },
             {
               label: (
-                <>
+                <Trans>
                   Accounts with <q>{query}</q>
-                </>
+                </Trans>
               ),
               to: `/search?q=${encodeURIComponent(query)}&type=accounts`,
               icon: 'group',
