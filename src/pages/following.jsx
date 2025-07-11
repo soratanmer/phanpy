@@ -1,3 +1,4 @@
+import { useLingui } from '@lingui/react/macro';
 import { useEffect, useRef } from 'preact/hooks';
 import { useSnapshot } from 'valtio';
 
@@ -16,24 +17,36 @@ import useTitle from '../utils/useTitle';
 const LIMIT = 20;
 
 function Following({ title, path, id, ...props }) {
-  useTitle(title || 'Following', path || '/following');
+  const { t } = useLingui();
+  useTitle(
+    title ||
+      t({
+        id: 'following.title',
+        message: 'Following',
+      }),
+    path || '/following',
+  );
   const { masto, streaming, instance } = api();
   const snapStates = useSnapshot(states);
+  const homeIterable = useRef();
   const homeIterator = useRef();
   const latestItem = useRef();
+  __BENCHMARK.end('time-to-following');
 
   console.debug('RENDER Following', title, id);
   const supportsPixelfed = supports('@pixelfed/home-include-reblogs');
 
   async function fetchHome(firstLoad) {
     if (firstLoad || !homeIterator.current) {
-      homeIterator.current = masto.v1.timelines.home.list({ limit: LIMIT });
+      __BENCHMARK.start('fetch-home-first');
+      homeIterable.current = masto.v1.timelines.home.list({ limit: LIMIT });
+      homeIterator.current = homeIterable.current.values();
     }
-    if (supportsPixelfed && homeIterator.current?.nextParams) {
-      if (typeof homeIterator.current.nextParams === 'string') {
-        homeIterator.current.nextParams += '&include_reblogs=true';
+    if (supportsPixelfed && homeIterable.current?.params) {
+      if (typeof homeIterable.current.params === 'string') {
+        homeIterable.current.params += '&include_reblogs=true';
       } else {
-        homeIterator.current.nextParams.include_reblogs = true;
+        homeIterable.current.params.include_reblogs = true;
       }
     }
     const results = await homeIterator.current.next();
@@ -63,6 +76,7 @@ function Following({ title, path, id, ...props }) {
         return bDate - aDate;
       });
     }
+    __BENCHMARK.end('fetch-home-first');
     return {
       ...results,
       value,
@@ -78,7 +92,7 @@ function Following({ title, path, id, ...props }) {
       if (supports('@pixelfed/home-include-reblogs')) {
         opts.include_reblogs = true;
       }
-      const results = await masto.v1.timelines.home.list(opts).next();
+      const results = await masto.v1.timelines.home.list(opts).values().next();
       let { value } = results;
       console.log('checkForUpdates', latestItem.current, value);
       const valueContainsLatestItem = value[0]?.id === latestItem.current; // since_id might not be supported
@@ -92,6 +106,7 @@ function Following({ title, path, id, ...props }) {
       }
       return false;
     } catch (e) {
+      console.error(e);
       return false;
     }
   }
@@ -127,10 +142,10 @@ function Following({ title, path, id, ...props }) {
 
   return (
     <Timeline
-      title={title || 'Following'}
+      title={title || t({ id: 'following.title', message: 'Following' })}
       id={id || 'following'}
-      emptyText="Nothing to see here."
-      errorText="Unable to load posts."
+      emptyText={t`Nothing to see here.`}
+      errorText={t`Unable to load posts.`}
       instance={instance}
       fetchItems={fetchHome}
       checkForUpdates={checkForUpdates}

@@ -1,16 +1,30 @@
 import './name-text.css';
 
+import { useLingui } from '@lingui/react';
 import { memo } from 'preact/compat';
 
 import { api } from '../utils/api';
+import mem from '../utils/mem';
 import states from '../utils/states';
 
 import Avatar from './avatar';
 import EmojiText from './emoji-text';
 
-const nameCollator = new Intl.Collator('en', {
-  sensitivity: 'base',
+const nameCollator = mem((locale) => {
+  const options = {
+    sensitivity: 'base',
+  };
+  try {
+    return new Intl.Collator(locale || undefined, options);
+  } catch (e) {
+    return new Intl.Collator(undefined, options);
+  }
 });
+
+const ACCT_REGEX = /([^@]+)(@.+)/i;
+const SHORTCODES_REGEX = /(\:(\w|\+|\-)+\:)(?=|[\!\.\?]|$)/g;
+const SPACES_REGEX = /\s+/g;
+const NON_ALPHA_NUMERIC_REGEX = /[^a-z0-9@\.]/gi;
 
 function NameText({
   account,
@@ -21,6 +35,8 @@ function NameText({
   external,
   onClick,
 }) {
+  const { i18n } = useLingui();
+  if (!account) return null;
   const {
     acct,
     avatar,
@@ -32,17 +48,17 @@ function NameText({
     bot,
     username,
   } = account;
-  const [_, acct1, acct2] = acct.match(/([^@]+)(@.+)/i) || [, acct];
+  const [_, acct1, acct2] = acct.match(ACCT_REGEX) || [, acct];
 
   if (!instance) instance = api().instance;
 
   const trimmedUsername = username.toLowerCase().trim();
   const trimmedDisplayName = (displayName || '').toLowerCase().trim();
   const shortenedDisplayName = trimmedDisplayName
-    .replace(/(\:(\w|\+|\-)+\:)(?=|[\!\.\?]|$)/g, '') // Remove shortcodes, regex from https://regex101.com/r/iE9uV0/1
-    .replace(/\s+/g, ''); // E.g. "My name" === "myname"
+    .replace(SHORTCODES_REGEX, '') // Remove shortcodes, regex from https://regex101.com/r/iE9uV0/1
+    .replace(SPACES_REGEX, ''); // E.g. "My name" === "myname"
   const shortenedAlphaNumericDisplayName = shortenedDisplayName.replace(
-    /[^a-z0-9@\.]/gi,
+    NON_ALPHA_NUMERIC_REGEX,
     '',
   ); // Remove non-alphanumeric characters
 
@@ -51,7 +67,10 @@ function NameText({
       (trimmedUsername === trimmedDisplayName ||
         trimmedUsername === shortenedDisplayName ||
         trimmedUsername === shortenedAlphaNumericDisplayName ||
-        nameCollator.compare(trimmedUsername, shortenedDisplayName) === 0)) ||
+        nameCollator(i18n.locale).compare(
+          trimmedUsername,
+          shortenedDisplayName,
+        ) === 0)) ||
     shortenedAlphaNumericDisplayName === acct.toLowerCase();
 
   return (
@@ -117,9 +136,11 @@ function NameText({
   );
 }
 
-export default memo(NameText, (oldProps, newProps) => {
-  // Only care about account.id, the other props usually don't change
-  const { account } = oldProps;
-  const { account: newAccount } = newProps;
-  return account?.acct === newAccount?.acct;
-});
+export default mem(NameText);
+
+// export default memo(NameText, (oldProps, newProps) => {
+//   // Only care about account.id, the other props usually don't change
+//   const { account } = oldProps;
+//   const { account: newAccount } = newProps;
+//   return account?.acct === newAccount?.acct;
+// });

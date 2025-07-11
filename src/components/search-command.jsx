@@ -20,11 +20,19 @@ export default memo(function SearchCommand({ onClose = () => {} }) {
       }, 0);
     },
     {
+      useKey: true,
       preventDefault: true,
       ignoreEventWhen: (e) => {
         const isSearchPage = /\/search/.test(location.hash);
         const hasModal = !!document.querySelector('#modal-container > *');
-        return isSearchPage || hasModal;
+        return (
+          isSearchPage ||
+          hasModal ||
+          e.metaKey ||
+          e.ctrlKey ||
+          e.altKey ||
+          e.shiftKey
+        );
       },
     },
   );
@@ -44,6 +52,8 @@ export default memo(function SearchCommand({ onClose = () => {} }) {
       enabled: showSearch,
       enableOnFormTags: true,
       preventDefault: true,
+      useKey: true,
+      ignoreEventWhen: (e) => e.metaKey || e.ctrlKey || e.altKey || e.shiftKey,
     },
   );
 
