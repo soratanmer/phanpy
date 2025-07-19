@@ -1,5 +1,6 @@
 import './generic-accounts.css';
 
+import { Trans, useLingui } from '@lingui/react/macro';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { InView } from 'react-intersection-observer';
 import { useSnapshot } from 'valtio';
@@ -20,14 +21,14 @@ export default function GenericAccounts({
   excludeRelationshipAttrs = [],
   postID,
   onClose = () => {},
-  blankCopy = 'Nothing to show',
+  blankCopy,
 }) {
+  const { t } = useLingui();
   const { masto, instance: currentInstance } = api();
   const isCurrentInstance = instance ? instance === currentInstance : true;
   const snapStates = useSnapshot(states);
   ``;
   const [uiState, setUIState] = useState('default');
-  const [accounts, setAccounts] = useState([]);
   const [showMore, setShowMore] = useState(false);
 
   useLocationChange(onClose);
@@ -43,6 +44,10 @@ export default function GenericAccounts({
     accounts: staticAccounts,
     showReactions,
   } = snapStates.showGenericAccounts;
+
+  const [accounts, setAccounts] = useState(
+    staticAccounts?.length ? staticAccounts : [],
+  );
 
   const [relationshipsMap, setRelationshipsMap] = useState({});
 
@@ -60,7 +65,7 @@ export default function GenericAccounts({
 
   const loadAccounts = (firstLoad) => {
     if (!fetchAccounts) return;
-    if (firstLoad) setAccounts([]);
+    if (firstLoad && !accounts?.length) setAccounts([]);
     setUIState('loading');
     (async () => {
       try {
@@ -115,14 +120,19 @@ export default function GenericAccounts({
 
   const firstLoad = useRef(true);
   useEffect(() => {
-    if (staticAccounts?.length > 0) {
-      setAccounts(staticAccounts);
-      loadRelationships(staticAccounts);
+    if (accounts?.length > 0) {
+      // setAccounts(staticAccounts);
+      if (fetchAccounts) {
+        loadAccounts(true);
+        firstLoad.current = false;
+      } else {
+        loadRelationships(accounts);
+      }
     } else {
       loadAccounts(true);
       firstLoad.current = false;
     }
-  }, [staticAccounts, fetchAccounts]);
+  }, [fetchAccounts]);
 
   useEffect(() => {
     if (firstLoad.current) return;
@@ -138,10 +148,10 @@ export default function GenericAccounts({
   return (
     <div id="generic-accounts-container" class="sheet" tabindex="-1">
       <button type="button" class="sheet-close" onClick={onClose}>
-        <Icon icon="x" />
+        <Icon icon="x" alt={t`Close`} />
       </button>
       <header>
-        <h2>{heading || 'Accounts'}</h2>
+        <h2>{heading || t`Accounts`}</h2>
       </header>
       <main>
         {post && (
@@ -201,11 +211,13 @@ export default function GenericAccounts({
                     class="plain block"
                     onClick={() => loadAccounts()}
                   >
-                    Show more&hellip;
+                    <Trans>Show more…</Trans>
                   </button>
                 </InView>
               ) : (
-                <p class="ui-state insignificant">The end.</p>
+                <p class="ui-state insignificant">
+                  <Trans>The end.</Trans>
+                </p>
               )
             ) : (
               uiState === 'loading' && (
@@ -220,9 +232,13 @@ export default function GenericAccounts({
             <Loader abrupt />
           </p>
         ) : uiState === 'error' ? (
-          <p class="ui-state">Error loading accounts</p>
+          <p class="ui-state">
+            <Trans>Error loading accounts</Trans>
+          </p>
         ) : (
-          <p class="ui-state insignificant">{blankCopy}</p>
+          <p class="ui-state insignificant">
+            {blankCopy || t`Nothing to show`}
+          </p>
         )}
       </main>
     </div>
