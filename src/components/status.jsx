@@ -1,6 +1,10 @@
 import './status.css';
+import 'temml/dist/Temml-Local.css';
+
 import '@justinribeiro/lite-youtube';
 
+import { msg, plural } from '@lingui/core/macro';
+import { Trans, useLingui } from '@lingui/react/macro';
 import {
   ControlledMenu,
   Menu,
@@ -13,18 +17,20 @@ import { shallowEqual } from 'fast-equals';
 import prettify from 'html-prettify';
 import pThrottle from 'p-throttle';
 import { Fragment } from 'preact';
-import { memo } from 'preact/compat';
+import { forwardRef, memo } from 'preact/compat';
 import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
 } from 'preact/hooks';
 import punycode from 'punycode/';
 import { useHotkeys } from 'react-hotkeys-hook';
-import { detectAll } from 'tinyld/light';
+// import { detectAll } from 'tinyld/light';
 import { useLongPress } from 'use-long-press';
 import { useSnapshot } from 'valtio';
 
@@ -37,11 +43,13 @@ import Menu2 from '../components/menu2';
 import Modal from '../components/modal';
 import NameText from '../components/name-text';
 import Poll from '../components/poll';
-import { api } from '../utils/api';
+import { api, getPreferences } from '../utils/api';
+import { langDetector } from '../utils/browser-translator';
 import emojifyText from '../utils/emojify-text';
 import enhanceContent from '../utils/enhance-content';
 import FilterContext from '../utils/filter-context';
 import { isFiltered } from '../utils/filters';
+import getDomain from '../utils/get-domain';
 import getTranslateTargetLanguage from '../utils/get-translate-target-language';
 import getHTMLText from '../utils/getHTMLText';
 import handleContentLinks from '../utils/handle-content-links';
@@ -88,17 +96,18 @@ function fetchAccount(id, masto) {
 const memFetchAccount = pmem(throttle(fetchAccount));
 
 const visibilityText = {
-  public: 'Public',
-  unlisted: 'Unlisted',
-  private: 'Followers only',
-  direct: 'Private mention',
+  public: msg`Public`,
+  local: msg`Local`,
+  unlisted: msg`Unlisted`,
+  private: msg`Followers only`,
+  direct: msg`Private mention`,
 };
 
 const isIOS =
   window.ontouchstart !== undefined &&
   /iPad|iPhone|iPod/.test(navigator.userAgent);
 
-const rtf = new Intl.RelativeTimeFormat();
+const RTF = mem((locale) => new Intl.RelativeTimeFormat(locale || undefined));
 
 const REACTIONS_LIMIT = 80;
 
@@ -113,20 +122,288 @@ function getPollText(poll) {
     )
     .join('\n')}`;
 }
-function getPostText(status) {
-  const { spoilerText, content, poll } = status;
+function getPostText(status, opts) {
+  const { maskCustomEmojis, maskURLs } = opts || {};
+  const { spoilerText, poll, emojis } = status;
+  let { content } = status;
+  if (maskCustomEmojis && emojis?.length) {
+    const emojisRegex = new RegExp(
+      `:(${emojis.map((e) => e.shortcode).join('|')}):`,
+      'g',
+    );
+    content = content.replace(emojisRegex, '⬚');
+  }
   return (
     (spoilerText ? `${spoilerText}\n\n` : '') +
-    getHTMLText(content) +
+    getHTMLText(content, {
+      preProcess:
+        maskURLs &&
+        ((dom) => {
+          // Remove links that contains text that starts with https?://
+          for (const a of dom.querySelectorAll('a')) {
+            const text = a.innerText.trim();
+            if (/^https?:\/\//i.test(text)) {
+              a.replaceWith('«🔗»');
+            }
+          }
+        }),
+    }) +
     getPollText(poll)
   );
 }
 
-const PostContent = memo(
+function forgivingQSA(selectors = [], dom = document) {
+  // Run QSA for list of selectors
+  // If a selector return invalid selector error, try the next one
+  for (const selector of selectors) {
+    try {
+      return dom.querySelectorAll(selector);
+    } catch (e) {}
+  }
+  return [];
+}
+
+function isTranslateble(content, emojis) {
+  if (!content) return false;
+  // Remove custom emojis
+  if (emojis?.length) {
+    const emojisRegex = new RegExp(
+      `:(${emojis.map((e) => e.shortcode).join('|')}):`,
+      'g',
+    );
+    content = content.replace(emojisRegex, '');
+  }
+  content = content.trim();
+  if (!content) return false;
+  const text = getHTMLText(content, {
+    preProcess: (dom) => {
+      // Remove .mention, pre, code, a:has(.invisible)
+      for (const a of forgivingQSA(
+        ['.mention, pre, code, a:has(.invisible)', '.mention, pre, code'],
+        dom,
+      )) {
+        a.remove();
+      }
+    },
+  });
+  return !!text;
+}
+
+function getHTMLTextForDetectLang(content, emojis) {
+  if (emojis?.length) {
+    const emojisRegex = new RegExp(
+      `:(${emojis.map((e) => e.shortcode).join('|')}):`,
+      'g',
+    );
+    content = content.replace(emojisRegex, '');
+  }
+
+  return getHTMLText(content, {
+    preProcess: (dom) => {
+      // Remove anything that can skew the language detection
+
+      // Remove .mention, .hashtag, pre, code, a:has(.invisible)
+      for (const a of forgivingQSA(
+        [
+          '.mention, .hashtag, pre, code, a:has(.invisible)',
+          '.mention, .hashtag, pre, code',
+        ],
+        dom,
+      )) {
+        a.remove();
+      }
+
+      // Remove links that contains text that starts with https?://
+      for (const a of dom.querySelectorAll('a')) {
+        const text = a.innerText.trim();
+        if (text.startsWith('https://') || text.startsWith('http://')) {
+          a.remove();
+        }
+      }
+    },
+  });
+}
+
+const HTTP_REGEX = /^http/i;
+
+// Follow https://mathstodon.xyz/about
+// > You can use LaTeX in toots here! Use \( and \) for inline, and \[ and \] for display mode.
+const DELIMITERS_PATTERNS = [
+  // '\\$\\$[\\s\\S]*?\\$\\$', // $$...$$
+  '\\\\\\[[\\s\\S]*?\\\\\\]', // \[...\]
+  '\\\\\\([\\s\\S]*?\\\\\\)', // \(...\)
+  // '\\\\begin\\{(?:equation\\*?|align\\*?|alignat\\*?|gather\\*?|CD)\\}[\\s\\S]*?\\\\end\\{(?:equation\\*?|align\\*?|alignat\\*?|gather\\*?|CD)\\}', // AMS environments
+  // '\\\\(?:ref|eqref)\\{[^}]*\\}', // \ref{...}, \eqref{...}
+];
+const DELIMITERS_REGEX = new RegExp(DELIMITERS_PATTERNS.join('|'), 'g');
+
+function cleanDOMForTemml(dom) {
+  // Define start and end delimiter patterns
+  const START_DELIMITERS = ['\\\\\\[', '\\\\\\(']; // \[ and \(
+  const startRegex = new RegExp(`(${START_DELIMITERS.join('|')})`);
+
+  // Walk through all text nodes
+  const walker = document.createTreeWalker(dom, NodeFilter.SHOW_TEXT);
+  const textNodes = [];
+  let node;
+  while ((node = walker.nextNode())) {
+    textNodes.push(node);
+  }
+
+  for (const textNode of textNodes) {
+    const text = textNode.textContent;
+    const startMatch = text.match(startRegex);
+
+    if (!startMatch) continue; // No start delimiter in this text node
+
+    // Find the matching end delimiter
+    const startDelimiter = startMatch[0];
+    const endDelimiter = startDelimiter === '\\[' ? '\\]' : '\\)';
+
+    // Collect nodes from start delimiter until end delimiter
+    const nodesToCombine = [textNode];
+    let currentNode = textNode;
+    let foundEnd = false;
+    let combinedText = text;
+
+    // Check if end delimiter is in the same text node
+    if (text.includes(endDelimiter)) {
+      foundEnd = true;
+    } else {
+      // Look through sibling nodes
+      while (currentNode.nextSibling && !foundEnd) {
+        const nextSibling = currentNode.nextSibling;
+
+        if (nextSibling.nodeType === Node.TEXT_NODE) {
+          nodesToCombine.push(nextSibling);
+          combinedText += nextSibling.textContent;
+          if (nextSibling.textContent.includes(endDelimiter)) {
+            foundEnd = true;
+          }
+        } else if (
+          nextSibling.nodeType === Node.ELEMENT_NODE &&
+          nextSibling.tagName === 'BR'
+        ) {
+          nodesToCombine.push(nextSibling);
+          combinedText += '\n';
+        } else {
+          // Found a non-BR element, stop and don't process
+          break;
+        }
+
+        currentNode = nextSibling;
+      }
+    }
+
+    // Only process if we found the end delimiter and have nodes to combine
+    if (foundEnd && nodesToCombine.length > 1) {
+      // Replace the first text node with combined text
+      textNode.textContent = combinedText;
+
+      // Remove the other nodes
+      for (let i = 1; i < nodesToCombine.length; i++) {
+        nodesToCombine[i].remove();
+      }
+    }
+  }
+}
+
+const MathBlock = ({ content, contentRef, onRevert }) => {
+  DELIMITERS_REGEX.lastIndex = 0; // Reset index to prevent g trap
+  const hasLatexContent = DELIMITERS_REGEX.test(content);
+
+  if (!hasLatexContent) return null;
+
+  const { t } = useLingui();
+  const [mathRendered, setMathRendered] = useState(false);
+  const toggleMathRendering = useCallback(
+    async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (mathRendered) {
+        // Revert to original content by refreshing PostContent
+        setMathRendered(false);
+        onRevert();
+      } else {
+        // Render math
+        try {
+          // This needs global because the codebase inside temml is calling a function from global.temml 🤦‍♂️
+          const temml =
+            window.temml || (window.temml = (await import('temml'))?.default);
+
+          cleanDOMForTemml(contentRef.current);
+          const originalContentRefHTML = contentRef.current.innerHTML;
+          temml.renderMathInElement(contentRef.current, {
+            fences: '(', // This should sync with DELIMITERS_REGEX
+            annotate: true,
+            throwOnError: true,
+            errorCallback: (err) => {
+              console.warn('Failed to render LaTeX:', err);
+            },
+          });
+
+          const hasMath = contentRef.current.querySelector('math.tml-display');
+          const htmlChanged =
+            contentRef.current.innerHTML !== originalContentRefHTML;
+          if (hasMath && htmlChanged) {
+            setMathRendered(true);
+          } else {
+            showToast(t`Unable to format math`);
+            setMathRendered(false);
+            onRevert(); // Revert because DOM modified by cleanDOMForTemml
+          }
+        } catch (e) {
+          console.error('Failed to LaTeX:', e);
+        }
+      }
+    },
+    [mathRendered],
+  );
+
+  return (
+    <div class="math-block">
+      <Icon icon="formula" size="s" /> <span>{t`Math expressions found.`}</span>{' '}
+      <button type="button" class="light small" onClick={toggleMathRendering}>
+        {mathRendered
+          ? t({
+              comment:
+                'Action to switch from rendered math back to raw (LaTeX) markup',
+              message: 'Show markup',
+            })
+          : t({
+              comment:
+                'Action to render math expressions from raw (LaTeX) markup',
+              message: 'Format math',
+            })}
+      </button>
+    </div>
+  );
+};
+
+const PostContent =
+  /*memo(*/
   ({ post, instance, previewMode }) => {
     const { content, emojis, language, mentions, url } = post;
+
+    const divRef = useRef();
+    useLayoutEffect(() => {
+      if (!divRef.current) return;
+      const dom = enhanceContent(content, {
+        emojis,
+        returnDOM: true,
+      });
+      // Remove target="_blank" from links
+      for (const a of dom.querySelectorAll('a.u-url[target="_blank"]')) {
+        if (!HTTP_REGEX.test(a.innerText.trim())) {
+          a.removeAttribute('target');
+        }
+      }
+      divRef.current.replaceChildren(dom.cloneNode(true));
+    }, [content, emojis?.length]);
+
     return (
       <div
+        ref={divRef}
         lang={language}
         dir="auto"
         class="inner-content"
@@ -136,28 +413,28 @@ const PostContent = memo(
           previewMode,
           statusURL: url,
         })}
-        dangerouslySetInnerHTML={{
-          __html: enhanceContent(content, {
-            emojis,
-            postEnhanceDOM: (dom) => {
-              // Remove target="_blank" from links
-              dom.querySelectorAll('a.u-url[target="_blank"]').forEach((a) => {
-                if (!/http/i.test(a.innerText.trim())) {
-                  a.removeAttribute('target');
-                }
-              });
-            },
-          }),
-        }}
+        // dangerouslySetInnerHTML={{
+        //   __html: enhanceContent(content, {
+        //     emojis,
+        //     postEnhanceDOM: (dom) => {
+        //       // Remove target="_blank" from links
+        //       dom.querySelectorAll('a.u-url[target="_blank"]').forEach((a) => {
+        //         if (!/http/i.test(a.innerText.trim())) {
+        //           a.removeAttribute('target');
+        //         }
+        //       });
+        //     },
+        //   }),
+        // }}
       />
     );
-  },
+  }; /*,
   (oldProps, newProps) => {
     const { post: oldPost } = oldProps;
     const { post: newPost } = newProps;
     return oldPost.content === newPost.content;
   },
-);
+);*/
 
 const SIZE_CLASS = {
   s: 'small',
@@ -165,7 +442,7 @@ const SIZE_CLASS = {
   l: 'large',
 };
 
-const detectLang = mem((text) => {
+const detectLang = pmem(async (text) => {
   text = text?.trim();
 
   // Ref: https://github.com/komodojp/tinyld/blob/develop/docs/benchmark.md
@@ -173,7 +450,29 @@ const detectLang = mem((text) => {
   if (text?.length > 500) {
     return null;
   }
+
+  if (langDetector) {
+    const langs = await langDetector.detect(text);
+    console.groupCollapsed(
+      '💬 DETECTLANG BROWSER',
+      langs.slice(0, 3).map((l) => l.detectedLanguage),
+    );
+    console.log(text, langs.slice(0, 3));
+    console.groupEnd();
+    const lang = langs[0];
+    if (lang?.detectedLanguage && lang?.confidence > 0.5) {
+      return lang.detectedLanguage;
+    }
+  }
+
+  const { detectAll } = await import('tinyld/light');
   const langs = detectAll(text);
+  console.groupCollapsed(
+    '💬 DETECTLANG TINYLD',
+    langs.slice(0, 3).map((l) => l.lang),
+  );
+  console.log(text, langs.slice(0, 3));
+  console.groupEnd();
   const lang = langs[0];
   if (lang?.lang && lang?.accuracy > 0.5) {
     // If > 50% accurate, use it
@@ -183,6 +482,37 @@ const detectLang = mem((text) => {
   }
   return null;
 });
+
+const readMoreText = msg`Read more →`;
+
+// All this work just to make sure this only lazy-run once
+// Because first run is slow due to intl-localematcher
+const DIFFERENT_LANG_CHECK = {};
+const checkDifferentLanguage = (
+  language,
+  contentTranslationHideLanguages = [],
+) => {
+  if (!language) return false;
+  const targetLanguage = getTranslateTargetLanguage(true);
+  const different =
+    language !== targetLanguage &&
+    !localeMatch([language], [targetLanguage]) &&
+    !contentTranslationHideLanguages.find(
+      (l) => language === l || localeMatch([language], [l]),
+    );
+  if (different)
+    DIFFERENT_LANG_CHECK[language + contentTranslationHideLanguages] = true;
+  return different;
+};
+
+const getCurrentAccID = mem(
+  () => {
+    return getCurrentAccountID();
+  },
+  {
+    maxAge: 60 * 1000, // 1 minute
+  },
+);
 
 function Status({
   statusID,
@@ -197,7 +527,7 @@ function Status({
   enableTranslate,
   forceTranslate: _forceTranslate,
   previewMode,
-  // allowFilters,
+  allowFilters,
   onMediaClick,
   quoted,
   onStatusLinkClick = () => {},
@@ -207,6 +537,9 @@ function Status({
   showReplyParent,
   mediaFirst,
 }) {
+  const { _, t, i18n } = useLingui();
+  const rtf = RTF(i18n.locale);
+
   if (skeleton) {
     return (
       <div
@@ -255,7 +588,7 @@ function Status({
       emojis: accountEmojis,
       bot,
       group,
-    },
+    } = {},
     id,
     repliesCount,
     reblogged,
@@ -277,7 +610,7 @@ function Status({
     inReplyToAccountId,
     content,
     mentions,
-    mediaAttachments,
+    mediaAttachments = [],
     reblog,
     uri,
     url,
@@ -296,31 +629,11 @@ function Status({
   useEffect(() => {
     if (!content) return;
     if (_language) return;
+    if (languageAutoDetected) return;
     let timer;
-    timer = setTimeout(() => {
-      let detected = detectLang(
-        getHTMLText(content, {
-          preProcess: (dom) => {
-            // Remove anything that can skew the language detection
-
-            // Remove .mention, .hashtag, pre, code, a:has(.invisible)
-            dom
-              .querySelectorAll(
-                '.mention, .hashtag, pre, code, a:has(.invisible)',
-              )
-              .forEach((a) => {
-                a.remove();
-              });
-
-            // Remove links that contains text that starts with https?://
-            dom.querySelectorAll('a').forEach((a) => {
-              const text = a.innerText.trim();
-              if (text.startsWith('https://') || text.startsWith('http://')) {
-                a.remove();
-              }
-            });
-          },
-        }),
+    timer = setTimeout(async () => {
+      let detected = await detectLang(
+        getHTMLTextForDetectLang(content, emojis),
       );
       setLanguageAutoDetected(detected);
     }, 1000);
@@ -332,22 +645,22 @@ function Status({
   const hasMediaAttachments = !!mediaAttachments?.length;
   if (mediaFirst && hasMediaAttachments) size = 's';
 
-  const currentAccount = useMemo(() => {
-    return getCurrentAccountID();
-  }, []);
+  const currentAccount = getCurrentAccID();
   const isSelf = useMemo(() => {
     return currentAccount && currentAccount === accountId;
   }, [accountId, currentAccount]);
 
   const filterContext = useContext(FilterContext);
   const filterInfo =
-    !isSelf && !readOnly && !previewMode && isFiltered(filtered, filterContext);
+    !isSelf &&
+    ((!readOnly && !previewMode) || allowFilters) &&
+    isFiltered(filtered, filterContext);
 
   if (filterInfo?.action === 'hide') {
     return null;
   }
 
-  console.debug('RENDER Status', id, status?.account.displayName, quoted);
+  console.debug('RENDER Status', id, status?.account?.displayName, quoted);
 
   const debugHover = (e) => {
     if (e.shiftKey) {
@@ -357,7 +670,11 @@ function Status({
     }
   };
 
-  if (/*allowFilters && */ size !== 'l' && filterInfo) {
+  if (
+    (allowFilters || size !== 'l') &&
+    filterInfo &&
+    filterInfo.action !== 'blur'
+  ) {
     return (
       <FilteredStatus
         status={status}
@@ -399,16 +716,14 @@ function Status({
     inReplyToAccountId === currentAccount ||
     mentions?.find((mention) => mention.id === currentAccount);
 
-  const readingExpandSpoilers = useMemo(() => {
-    const prefs = store.account.get('preferences') || {};
-    return !!prefs['reading:expand:spoilers'];
-  }, []);
-  const readingExpandMedia = useMemo(() => {
-    // default | show_all | hide_all
-    // Ignore hide_all because it means hide *ALL* media including non-sensitive ones
-    const prefs = store.account.get('preferences') || {};
-    return prefs['reading:expand:media']?.toLowerCase() || 'default';
-  }, []);
+  const prefs = getPreferences();
+  const readingExpandSpoilers = !!prefs['reading:expand:spoilers'];
+
+  // default | show_all | hide_all
+  // Ignore hide_all because it means hide *ALL* media including non-sensitive ones
+  const readingExpandMedia =
+    prefs['reading:expand:media']?.toLowerCase() || 'default';
+
   // FOR TESTING:
   // const readingExpandSpoilers = true;
   // const readingExpandMedia = 'show_all';
@@ -416,7 +731,7 @@ function Status({
     previewMode || readingExpandSpoilers || !!snapStates.spoilers[id];
   const showSpoilerMedia =
     previewMode ||
-    readingExpandMedia === 'show_all' ||
+    (readingExpandMedia === 'show_all' && filterInfo?.action !== 'blur') ||
     !!snapStates.spoilersMedia[id];
 
   if (reblog) {
@@ -430,7 +745,7 @@ function Status({
           onMouseEnter={debugHover}
         >
           <div class="status-pre-meta">
-            <Icon icon="group" size="l" alt="Group" />{' '}
+            <Icon icon="group" size="l" alt={t`Group`} />{' '}
             <NameText account={status.account} instance={instance} showAvatar />
           </div>
           <Status
@@ -454,8 +769,10 @@ function Status({
       >
         <div class="status-pre-meta">
           <Icon icon="rocket" size="l" />{' '}
-          <NameText account={status.account} instance={instance} showAvatar />{' '}
-          <span>boosted</span>
+          <Trans>
+            <NameText account={status.account} instance={instance} showAvatar />{' '}
+            <span>boosted</span>
+          </Trans>
         </div>
         <Status
           status={statusID ? null : reblog}
@@ -504,9 +821,9 @@ function Status({
   const isSizeLarge = size === 'l';
 
   const [forceTranslate, setForceTranslate] = useState(_forceTranslate);
-  const targetLanguage = getTranslateTargetLanguage(true);
-  const contentTranslationHideLanguages =
-    snapStates.settings.contentTranslationHideLanguages || [];
+  // const targetLanguage = getTranslateTargetLanguage(true);
+  // const contentTranslationHideLanguages =
+  //   snapStates.settings.contentTranslationHideLanguages || [];
   const { contentTranslation, contentTranslationAutoInline } =
     snapStates.settings;
   if (!contentTranslation) enableTranslate = false;
@@ -520,8 +837,8 @@ function Status({
       spoilerText ||
       sensitive ||
       poll ||
-      card ||
-      mediaAttachments?.length
+      card /*||
+      mediaAttachments?.length*/
     ) {
       return false;
     }
@@ -548,23 +865,27 @@ function Status({
   const spoilerContentRef = useTruncated();
   const contentRef = useTruncated();
   const mediaContainerRef = useTruncated();
-  const readMoreText = 'Read more →';
 
   const statusRef = useRef(null);
+  const [reloadPostContentCount, reloadPostContent] = useReducer(
+    (c) => c + 1,
+    0,
+  );
 
-  const unauthInteractionErrorMessage = `Sorry, your current logged-in instance can't interact with this post from another instance.`;
+  const unauthInteractionErrorMessage = t`Sorry, your current logged-in instance can't interact with this post from another instance.`;
 
   const textWeight = useCallback(
     () =>
       Math.max(
-        Math.round((spoilerText.length + htmlContentLength(content)) / 140) ||
-          1,
+        Math.round(
+          ((spoilerText?.length || 0) + htmlContentLength(content)) / 140,
+        ) || 1,
         1,
       ),
     [spoilerText, content],
   );
 
-  const createdDateText = niceDateTime(createdAtDate);
+  const createdDateText = createdAt && niceDateTime(createdAtDate);
   const editedDateText = editedAt && niceDateTime(editedAtDate);
 
   // Can boost if:
@@ -606,44 +927,44 @@ function Status({
     );
   }, [createdAtDate]);
 
-  const boostStatus = async () => {
-    if (!sameInstance || !authenticated) {
-      alert(unauthInteractionErrorMessage);
-      return false;
-    }
-    try {
-      if (!reblogged) {
-        let confirmText = 'Boost this post?';
-        if (mediaNoDesc) {
-          confirmText += '\n\n⚠️ Some media have no descriptions.';
-        }
-        const yes = confirm(confirmText);
-        if (!yes) {
-          return false;
-        }
-      }
-      // Optimistic
-      states.statuses[sKey] = {
-        ...status,
-        reblogged: !reblogged,
-        reblogsCount: reblogsCount + (reblogged ? -1 : 1),
-      };
-      if (reblogged) {
-        const newStatus = await masto.v1.statuses.$select(id).unreblog();
-        saveStatus(newStatus, instance);
-        return true;
-      } else {
-        const newStatus = await masto.v1.statuses.$select(id).reblog();
-        saveStatus(newStatus, instance);
-        return true;
-      }
-    } catch (e) {
-      console.error(e);
-      // Revert optimistism
-      states.statuses[sKey] = status;
-      return false;
-    }
-  };
+  // const boostStatus = async () => {
+  //   if (!sameInstance || !authenticated) {
+  //     alert(unauthInteractionErrorMessage);
+  //     return false;
+  //   }
+  //   try {
+  //     if (!reblogged) {
+  //       let confirmText = 'Boost this post?';
+  //       if (mediaNoDesc) {
+  //         confirmText += '\n\n⚠️ Some media have no descriptions.';
+  //       }
+  //       const yes = confirm(confirmText);
+  //       if (!yes) {
+  //         return false;
+  //       }
+  //     }
+  //     // Optimistic
+  //     states.statuses[sKey] = {
+  //       ...status,
+  //       reblogged: !reblogged,
+  //       reblogsCount: reblogsCount + (reblogged ? -1 : 1),
+  //     };
+  //     if (reblogged) {
+  //       const newStatus = await masto.v1.statuses.$select(id).unreblog();
+  //       saveStatus(newStatus, instance);
+  //       return true;
+  //     } else {
+  //       const newStatus = await masto.v1.statuses.$select(id).reblog();
+  //       saveStatus(newStatus, instance);
+  //       return true;
+  //     }
+  //   } catch (e) {
+  //     console.error(e);
+  //     // Revert optimistism
+  //     states.statuses[sKey] = status;
+  //     return false;
+  //   }
+  // };
   const confirmBoostStatus = async () => {
     if (!sameInstance || !authenticated) {
       alert(unauthInteractionErrorMessage);
@@ -705,8 +1026,8 @@ function Status({
       if (!isSizeLarge && done) {
         showToast(
           favourited
-            ? `Unliked @${username || acct}'s post`
-            : `Liked @${username || acct}'s post`,
+            ? t`Unliked @${username || acct}'s post`
+            : t`Liked @${username || acct}'s post`,
         );
       }
     } catch (e) {}
@@ -745,20 +1066,47 @@ function Status({
       if (!isSizeLarge && done) {
         showToast(
           bookmarked
-            ? `Unbookmarked @${username || acct}'s post`
-            : `Bookmarked @${username || acct}'s post`,
+            ? t`Unbookmarked @${username || acct}'s post`
+            : t`Bookmarked @${username || acct}'s post`,
         );
       }
     } catch (e) {}
   };
 
-  const differentLanguage =
-    !!language &&
-    language !== targetLanguage &&
-    !localeMatch([language], [targetLanguage]) &&
-    !contentTranslationHideLanguages.find(
-      (l) => language === l || localeMatch([language], [l]),
-    );
+  // const differentLanguage =
+  //   !!language &&
+  //   language !== targetLanguage &&
+  //   !localeMatch([language], [targetLanguage]) &&
+  //   !contentTranslationHideLanguages.find(
+  //     (l) => language === l || localeMatch([language], [l]),
+  //   );
+  const contentTranslationHideLanguages =
+    snapStates.settings.contentTranslationHideLanguages || [];
+  const [differentLanguage, setDifferentLanguage] = useState(
+    () =>
+      DIFFERENT_LANG_CHECK[language + contentTranslationHideLanguages] ||
+      checkDifferentLanguage(language, contentTranslationHideLanguages),
+  );
+  useEffect(() => {
+    if (!language || differentLanguage) {
+      return;
+    }
+    if (
+      !differentLanguage &&
+      DIFFERENT_LANG_CHECK[language + contentTranslationHideLanguages]
+    ) {
+      setDifferentLanguage(true);
+      return;
+    }
+    let timeout = setTimeout(() => {
+      const different = checkDifferentLanguage(
+        language,
+        contentTranslationHideLanguages,
+      );
+      if (different) setDifferentLanguage(different);
+    }, 1);
+    return () => clearTimeout(timeout);
+  }, [language, differentLanguage, contentTranslationHideLanguages]);
 
   const reblogIterator = useRef();
   const favouriteIterator = useRef();
@@ -768,12 +1116,14 @@ function Status({
         .$select(statusID)
         .rebloggedBy.list({
           limit: REACTIONS_LIMIT,
-        });
+        })
+        .values();
       favouriteIterator.current = masto.v1.statuses
         .$select(statusID)
         .favouritedBy.list({
           limit: REACTIONS_LIMIT,
-        });
+        })
+        .values();
     }
     const [{ value: reblogResults }, { value: favouriteResults }] =
       await Promise.allSettled([
@@ -812,6 +1162,25 @@ function Status({
   const actionsRef = useRef();
   const isPublic = ['public', 'unlisted'].includes(visibility);
   const isPinnable = ['public', 'unlisted', 'private'].includes(visibility);
+  const menuFooter =
+    mediaNoDesc && !reblogged ? (
+      <div class="footer">
+        <Icon icon="alert" />
+        <Trans>Some media have no descriptions.</Trans>
+      </div>
+    ) : (
+      statusMonthsAgo >= 3 && (
+        <div class="footer">
+          <Icon icon="info" />
+          <span>
+            <Trans>
+              Old post (<strong>{rtf.format(-statusMonthsAgo, 'month')}</strong>
+              )
+            </Trans>
+          </span>
+        </div>
+      )
+    );
   const StatusMenuItems = (
     <>
       {!isSizeLarge && sameInstance && (
@@ -820,7 +1189,7 @@ function Status({
             <MenuItem onClick={replyStatus}>
               <Icon icon="comment" />
               <span>
-                {repliesCount > 0 ? shortenNumber(repliesCount) : 'Reply'}
+                {repliesCount > 0 ? shortenNumber(repliesCount) : t`Reply`}
               </span>
             </MenuItem>
             <MenuConfirm
@@ -828,7 +1197,7 @@ function Status({
               confirmLabel={
                 <>
                   <Icon icon="rocket" />
-                  <span>{reblogged ? 'Unboost' : 'Boost'}</span>
+                  <span>{reblogged ? t`Unboost` : t`Boost`}</span>
                 </>
               }
               className={`menu-reblog ${reblogged ? 'checked' : ''}`}
@@ -843,28 +1212,12 @@ function Status({
                   }}
                 >
                   <Icon icon="quote" />
-                  <span>Quote</span>
+                  <span>
+                    <Trans>Quote</Trans>
+                  </span>
                 </MenuItem>
               }
-              menuFooter={
-                mediaNoDesc && !reblogged ? (
-                  <div class="footer">
-                    <Icon icon="alert" />
-                    Some media have no descriptions.
-                  </div>
-                ) : (
-                  statusMonthsAgo >= 3 && (
-                    <div class="footer">
-                      <Icon icon="info" />
-                      <span>
-                        Old post (
-                        <strong>{rtf.format(-statusMonthsAgo, 'month')}</strong>
-                        )
-                      </span>
-                    </div>
-                  )
-                )
-              }
+              menuFooter={menuFooter}
               disabled={!canBoost}
               onClick={async () => {
                 try {
@@ -872,8 +1225,8 @@ function Status({
                   if (!isSizeLarge && done) {
                     showToast(
                       reblogged
-                        ? `Unboosted @${username || acct}'s post`
-                        : `Boosted @${username || acct}'s post`,
+                        ? t`Unboosted @${username || acct}'s post`
+                        : t`Boosted @${username || acct}'s post`,
                     );
                   }
                 } catch (e) {}
@@ -884,8 +1237,8 @@ function Status({
                 {reblogsCount > 0
                   ? shortenNumber(reblogsCount)
                   : reblogged
-                  ? 'Unboost'
-                  : 'Boost…'}
+                    ? t`Unboost`
+                    : t`Boost…`}
               </span>
             </MenuConfirm>
             <MenuItem
@@ -897,8 +1250,8 @@ function Status({
                 {favouritesCount > 0
                   ? shortenNumber(favouritesCount)
                   : favourited
-                  ? 'Unlike'
-                  : 'Like'}
+                    ? t`Unlike`
+                    : t`Like`}
               </span>
             </MenuItem>
             {supports('@mastodon/post-bookmark') && (
@@ -907,7 +1260,7 @@ function Status({
                 className={`menu-bookmark ${bookmarked ? 'checked' : ''}`}
               >
                 <Icon icon="bookmark" />
-                <span>{bookmarked ? 'Unbookmark' : 'Bookmark'}</span>
+                <span>{bookmarked ? t`Unbookmark` : t`Bookmark`}</span>
               </MenuItem>
             )}
           </div>
@@ -921,7 +1274,7 @@ function Status({
           <MenuItem
             onClick={() => {
               states.showGenericAccounts = {
-                heading: 'Boosted/Liked by…',
+                heading: t`Boosted/Liked by…`,
                 fetchAccounts: fetchBoostedLikedByAccounts,
                 instance,
                 showReactions: true,
@@ -931,67 +1284,77 @@ function Status({
           >
             <Icon icon="react" />
             <span>
-              Boosted/Liked by<span class="more-insignificant">…</span>
+              <Trans>Boosted/Liked by…</Trans>
             </span>
           </MenuItem>
         </>
       )}
-      {!mediaFirst && (
-        <>
-          {(enableTranslate || !language || differentLanguage) && (
-            <MenuDivider />
-          )}
+      {(isSizeLarge ||
+        (!mediaFirst &&
+          (enableTranslate || !language || differentLanguage))) && (
+        <MenuDivider />
+      )}
+      {!mediaFirst && (enableTranslate || !language || differentLanguage) && (
+        <div class={supportsTTS ? 'menu-horizontal' : ''}>
           {enableTranslate ? (
-            <div class={supportsTTS ? 'menu-horizontal' : ''}>
-              <MenuItem
-                disabled={forceTranslate}
-                onClick={() => {
-                  setForceTranslate(true);
-                }}
-              >
-                <Icon icon="translate" />
-                <span>Translate</span>
-              </MenuItem>
-              {supportsTTS && (
-                <MenuItem
-                  onClick={() => {
-                    const postText = getPostText(status);
-                    if (postText) {
-                      speak(postText, language);
-                    }
-                  }}
-                >
-                  <Icon icon="speak" />
-                  <span>Speak</span>
-                </MenuItem>
-              )}
-            </div>
+            <MenuItem
+              disabled={forceTranslate}
+              onClick={() => setForceTranslate(true)}
+            >
+              <Icon icon="translate" />
+              <span>
+                <Trans>Translate</Trans>
+              </span>
+            </MenuItem>
           ) : (
-            (!language || differentLanguage) && (
-              <div class={supportsTTS ? 'menu-horizontal' : ''}>
-                <MenuLink
-                  to={`${instance ? `/${instance}` : ''}/s/${id}?translate=1`}
-                >
-                  <Icon icon="translate" />
-                  <span>Translate</span>
-                </MenuLink>
-                {supportsTTS && (
-                  <MenuItem
-                    onClick={() => {
-                      const postText = getPostText(status);
-                      if (postText) {
-                        speak(postText, language);
-                      }
-                    }}
-                  >
-                    <Icon icon="speak" />
-                    <span>Speak</span>
-                  </MenuItem>
-                )}
-              </div>
-            )
+            <MenuLink
+              to={`${instance ? `/${instance}` : ''}/s/${id}?translate=1`}
+            >
+              <Icon icon="translate" />
+              <span>
+                <Trans>Translate</Trans>
+              </span>
+            </MenuLink>
           )}
-        </>
+          {supportsTTS && (
+            <MenuItem
+              onClick={() => {
+                try {
+                  const postText = getPostText(status);
+                  if (postText) {
+                    speak(postText, language);
+                  }
+                } catch (error) {
+                  console.error('Failed to speak text:', error);
+                }
+              }}
+            >
+              <Icon icon="speak" />
+              <span>
+                <Trans>Speak</Trans>
+              </span>
+            </MenuItem>
+          )}
+        </div>
+      )}
+      {isSizeLarge && (
+        <MenuItem
+          onClick={() => {
+            try {
+              const postText = getPostText(status);
+              navigator.clipboard.writeText(postText);
+              showToast(t`Post text copied`);
+            } catch (e) {
+              console.error(e);
+              showToast(t`Unable to copy post text`);
+            }
+          }}
+        >
+          <Icon icon="clipboard" />
+          <span>
+            <Trans>Copy post text</Trans>
+          </span>
+        </MenuItem>
       )}
       {((!isSizeLarge && sameInstance) ||
         enableTranslate ||
@@ -1007,10 +1370,13 @@ function Status({
           >
             <Icon icon="arrows-right" />
             <small>
-              View post by @{username || acct}
+              <Trans>
+                View post by{' '}
+                <span class="bidi-isolate">@{username || acct}</span>
+              </Trans>
               <br />
               <span class="more-insignificant">
-                {visibilityText[visibility]} • {createdDateText}
+                {_(visibilityText[visibility])} • {createdDateText}
               </span>
             </small>
           </MenuLink>
@@ -1025,16 +1391,25 @@ function Status({
           >
             <Icon icon="history" />
             <small>
-              Show Edit History
+              <Trans>Show Edit History</Trans>
               <br />
-              <span class="more-insignificant">Edited: {editedDateText}</span>
+              <span class="more-insignificant">
+                <Trans>Edited: {editedDateText}</Trans>
+              </span>
             </small>
           </MenuItem>
         </>
       )}
       <MenuItem href={url} target="_blank">
         <Icon icon="external" />
-        <small class="menu-double-lines">{nicePostURL(url)}</small>
+        <small
+          class="menu-double-lines"
+          style={{
+            maxWidth: '16em',
+          }}
+        >
+          {nicePostURL(url)}
+        </small>
       </MenuItem>
       <div class="menu-horizontal">
         <MenuItem
@@ -1042,15 +1417,17 @@ function Status({
             // Copy url to clipboard
             try {
               navigator.clipboard.writeText(url);
-              showToast('Link copied');
+              showToast(t`Link copied`);
             } catch (e) {
               console.error(e);
-              showToast('Unable to copy link');
+              showToast(t`Unable to copy link`);
             }
           }}
         >
           <Icon icon="link" />
-          <span>Copy</span>
+          <span>
+            <Trans>Copy</Trans>
+          </span>
         </MenuItem>
         {isPublic &&
           navigator?.share &&
@@ -1065,12 +1442,14 @@ function Status({
                   });
                 } catch (e) {
                   console.error(e);
-                  alert("Sharing doesn't seem to work.");
+                  alert(t`Sharing doesn't seem to work.`);
                 }
               }}
             >
               <Icon icon="share" />
-              <span>Share…</span>
+              <span>
+                <Trans>Share…</Trans>
+              </span>
             </MenuItem>
           )}
       </div>
@@ -1081,7 +1460,9 @@ function Status({
           }}
         >
           <Icon icon="code" />
-          <span>Embed post</span>
+          <span>
+            <Trans>Embed post</Trans>
+          </span>
         </MenuItem>
       )}
       {(isSelf || mentionSelf) && <MenuDivider />}
@@ -1093,13 +1474,15 @@ function Status({
                 .$select(id)
                 [muted ? 'unmute' : 'mute']();
               saveStatus(newStatus, instance);
-              showToast(muted ? 'Conversation unmuted' : 'Conversation muted');
+              showToast(
+                muted ? t`Conversation unmuted` : t`Conversation muted`,
+              );
             } catch (e) {
               console.error(e);
               showToast(
                 muted
-                  ? 'Unable to unmute conversation'
-                  : 'Unable to mute conversation',
+                  ? t`Unable to unmute conversation`
+                  : t`Unable to mute conversation`,
               );
             }
           }}
@@ -1107,12 +1490,16 @@ function Status({
           {muted ? (
             <>
               <Icon icon="unmute" />
-              <span>Unmute conversation</span>
+              <span>
+                <Trans>Unmute conversation</Trans>
+              </span>
             </>
           ) : (
             <>
               <Icon icon="mute" />
-              <span>Mute conversation</span>
+              <span>
+                <Trans>Mute conversation</Trans>
+              </span>
             </>
           )}
         </MenuItem>
@@ -1127,24 +1514,30 @@ function Status({
               saveStatus(newStatus, instance);
               showToast(
                 pinned
-                  ? 'Post unpinned from profile'
-                  : 'Post pinned to profile',
+                  ? t`Post unpinned from profile`
+                  : t`Post pinned to profile`,
               );
             } catch (e) {
               console.error(e);
-              showToast(pinned ? 'Unable to unpin post' : 'Unable to pin post');
+              showToast(
+                pinned ? t`Unable to unpin post` : t`Unable to pin post`,
+              );
             }
           }}
         >
           {pinned ? (
             <>
               <Icon icon="unpin" />
-              <span>Unpin from profile</span>
+              <span>
+                <Trans>Unpin from profile</Trans>
+              </span>
             </>
           ) : (
             <>
               <Icon icon="pin" />
-              <span>Pin to profile</span>
+              <span>
+                <Trans>Pin to profile</Trans>
+              </span>
             </>
           )}
         </MenuItem>
@@ -1160,7 +1553,9 @@ function Status({
               }}
             >
               <Icon icon="pencil" />
-              <span>Edit</span>
+              <span>
+                <Trans>Edit</Trans>
+              </span>
             </MenuItem>
           )}
           {isSizeLarge && (
@@ -1169,9 +1564,14 @@ function Status({
               confirmLabel={
                 <>
                   <Icon icon="trash" />
-                  <span>Delete this post?</span>
+                  <span>
+                    <Trans>Delete this post?</Trans>
+                  </span>
                 </>
               }
+              itemProps={{
+                className: 'danger',
+              }}
               menuItemClassName="danger"
               onClick={() => {
                 // const yes = confirm('Delete this post?');
@@ -1181,17 +1581,19 @@ function Status({
                     await masto.v1.statuses.$select(id).remove();
                     const cachedStatus = getStatus(id, instance);
                     cachedStatus._deleted = true;
-                    showToast('Deleted');
+                    showToast(t`Post deleted`);
                   } catch (e) {
                     console.error(e);
-                    showToast('Unable to delete');
+                    showToast(t`Unable to delete post`);
                   }
                 })();
                 // }
               }}
             >
               <Icon icon="trash" />
-              <span>Delete…</span>
+              <span>
+                <Trans>Delete…</Trans>
+              </span>
             </MenuConfirm>
           )}
         </div>
@@ -1209,7 +1611,9 @@ function Status({
             }}
           >
             <Icon icon="flag" />
-            <span>Report post…</span>
+            <span>
+              <Trans>Report post…</Trans>
+            </span>
           </MenuItem>
         </>
       )}
@@ -1262,24 +1666,33 @@ function Status({
   const hotkeysEnabled = !readOnly && !previewMode && !quoted;
   const rRef = useHotkeys('r, shift+r', replyStatus, {
     enabled: hotkeysEnabled,
+    useKey: true,
+    ignoreEventWhen: (e) => e.metaKey || e.ctrlKey || e.altKey,
   });
   const fRef = useHotkeys('f, l', favouriteStatusNotify, {
     enabled: hotkeysEnabled,
+    ignoreEventWhen: (e) => e.metaKey || e.ctrlKey || e.altKey || e.shiftKey,
+    useKey: true,
   });
   const dRef = useHotkeys('d', bookmarkStatusNotify, {
     enabled: hotkeysEnabled,
+    useKey: true,
+    ignoreEventWhen: (e) => e.metaKey || e.ctrlKey || e.altKey || e.shiftKey,
   });
   const bRef = useHotkeys(
     'shift+b',
-    () => {
+    (e) => {
+      // Need shiftKey check due to useKey: true
+      if (!e.shiftKey) return;
+
       (async () => {
         try {
           const done = await confirmBoostStatus();
           if (!isSizeLarge && done) {
             showToast(
               reblogged
-                ? `Unboosted @${username || acct}'s post`
-                : `Boosted @${username || acct}'s post`,
+                ? t`Unboosted @${username || acct}'s post`
+                : t`Boosted @${username || acct}'s post`,
             );
           }
         } catch (e) {}
@@ -1287,30 +1700,39 @@ function Status({
     },
     {
       enabled: hotkeysEnabled && canBoost,
+      useKey: true,
+      ignoreEventWhen: (e) => e.metaKey || e.ctrlKey || e.altKey,
     },
   );
-  const xRef = useHotkeys('x', (e) => {
-    const activeStatus = document.activeElement.closest(
-      '.status-link, .status-focus',
-    );
-    if (activeStatus) {
-      const spoilerButton = activeStatus.querySelector(
-        '.spoiler-button:not(.spoiling)',
+  const xRef = useHotkeys(
+    'x',
+    (e) => {
+      const activeStatus = document.activeElement.closest(
+        '.status-link, .status-focus',
       );
-      if (spoilerButton) {
-        e.stopPropagation();
-        spoilerButton.click();
-      } else {
-        const spoilerMediaButton = activeStatus.querySelector(
-          '.spoiler-media-button:not(.spoiling)',
+      if (activeStatus) {
+        const spoilerButton = activeStatus.querySelector(
+          '.spoiler-button:not(.spoiling)',
         );
-        if (spoilerMediaButton) {
+        if (spoilerButton) {
           e.stopPropagation();
-          spoilerMediaButton.click();
+          spoilerButton.click();
+        } else {
+          const spoilerMediaButton = activeStatus.querySelector(
+            '.spoiler-media-button:not(.spoiling)',
+          );
+          if (spoilerMediaButton) {
+            e.stopPropagation();
+            spoilerMediaButton.click();
+          }
         }
       }
-    }
-  });
+    },
+    {
+      useKey: true,
+      ignoreEventWhen: (e) => e.metaKey || e.ctrlKey || e.altKey || e.shiftKey,
+    },
+  );
 
   const displayedMediaAttachments = mediaAttachments.slice(
     0,
@@ -1553,8 +1975,8 @@ function Status({
             >
               <StatusButton
                 size="s"
-                title="Reply"
-                alt="Reply"
+                title={t`Reply`}
+                alt={t`Reply`}
                 class="reply-button"
                 icon="comment"
                 iconSize="m"
@@ -1563,8 +1985,8 @@ function Status({
               <StatusButton
                 size="s"
                 checked={favourited}
-                title={['Like', 'Unlike']}
-                alt={['Like', 'Liked']}
+                title={[t`Like`, t`Unlike`]}
+                alt={[t`Like`, t`Liked`]}
                 class="favourite-button"
                 icon="heart"
                 iconSize="m"
@@ -1573,7 +1995,7 @@ function Status({
               />
               <button
                 type="button"
-                title="More"
+                title={t`More`}
                 class="plain more-button"
                 onClick={(e) => {
                   e.preventDefault();
@@ -1590,16 +2012,29 @@ function Status({
                   setIsContextMenuOpen('actions-bar');
                 }}
               >
-                <Icon icon="more2" size="m" alt="More" />
+                <Icon icon="more2" size="m" alt={t`More`} />
               </button>
             </div>
           )}
         {size !== 'l' && (
           <div class="status-badge">
-            {reblogged && <Icon class="reblog" icon="rocket" size="s" />}
-            {favourited && <Icon class="favourite" icon="heart" size="s" />}
-            {bookmarked && <Icon class="bookmark" icon="bookmark" size="s" />}
-            {_pinned && <Icon class="pin" icon="pin" size="s" />}
+            {reblogged && (
+              <Icon class="reblog" icon="rocket" size="s" alt={t`Boosted`} />
+            )}
+            {favourited && (
+              <Icon class="favourite" icon="heart" size="s" alt={t`Liked`} />
+            )}
+            {bookmarked && (
+              <Icon
+                class="bookmark"
+                icon="bookmark"
+                size="s"
+                alt={t`Bookmarked`}
+              />
+            )}
+            {_pinned && (
+              <Icon class="pin" icon="pin" size="s" alt={t`Pinned`} />
+            )}
           </div>
         )}
         {size !== 's' && (
@@ -1621,143 +2056,153 @@ function Status({
           </a>
         )}
         <div class="container">
-          <div class="meta">
-            <span class="meta-name">
-              <NameText
-                account={status.account}
-                instance={instance}
-                showAvatar={size === 's'}
-                showAcct={isSizeLarge}
-              />
-            </span>
-            {/* {inReplyToAccount && !withinContext && size !== 's' && (
-              <>
-                {' '}
-                <span class="ib">
-                  <Icon icon="arrow-right" class="arrow" />{' '}
-                  <NameText account={inReplyToAccount} instance={instance} short />
-                </span>
-              </>
-            )} */}
-            {/* </span> */}{' '}
-            {size !== 'l' &&
-              (_deleted ? (
-                <span class="status-deleted-tag">Deleted</span>
-              ) : url && !previewMode && !readOnly && !quoted ? (
-                <Link
-                  to={instance ? `/${instance}/s/${id}` : `/s/${id}`}
-                  onClick={(e) => {
-                    if (
-                      e.metaKey ||
-                      e.ctrlKey ||
-                      e.shiftKey ||
-                      e.altKey ||
-                      e.which === 2
-                    ) {
-                      return;
-                    }
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onStatusLinkClick?.(e, status);
-                    setContextMenuProps({
-                      anchorRef: {
-                        current: e.currentTarget,
-                      },
-                      align: 'end',
-                      direction: 'bottom',
-                      gap: 4,
-                    });
-                    setIsContextMenuOpen(true);
-                  }}
-                  class={`time ${
-                    isContextMenuOpen && contextMenuProps?.anchorRef
-                      ? 'is-open'
-                      : ''
-                  }`}
-                >
-                  {showCommentHint && !showCommentCount ? (
-                    <Icon
-                      icon="comment2"
-                      size="s"
-                      alt={`${repliesCount} ${
-                        repliesCount === 1 ? 'reply' : 'replies'
-                      }`}
-                    />
-                  ) : (
-                    visibility !== 'public' &&
-                    visibility !== 'direct' && (
+          {!!(status.account || createdAt) && (
+            <div class="meta">
+              <span class="meta-name">
+                <NameText
+                  account={status.account}
+                  instance={instance}
+                  showAvatar={size === 's'}
+                  showAcct={isSizeLarge}
+                />
+              </span>
+              {/* {inReplyToAccount && !withinContext && size !== 's' && (
+                <>
+                  {' '}
+                  <span class="ib">
+                    <Icon icon="arrow-right" class="arrow" />{' '}
+                    <NameText account={inReplyToAccount} instance={instance} short />
+                  </span>
+                </>
+              )} */}
+              {/* </span> */}{' '}
+              {size !== 'l' &&
+                (_deleted ? (
+                  <span class="status-deleted-tag">
+                    <Trans>Deleted</Trans>
+                  </span>
+                ) : url && !previewMode && !readOnly && !quoted ? (
+                  <Link
+                    to={instance ? `/${instance}/s/${id}` : `/s/${id}`}
+                    onClick={(e) => {
+                      if (
+                        e.metaKey ||
+                        e.ctrlKey ||
+                        e.shiftKey ||
+                        e.altKey ||
+                        e.which === 2
+                      ) {
+                        return;
+                      }
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onStatusLinkClick?.(e, status);
+                      setContextMenuProps({
+                        anchorRef: {
+                          current: e.currentTarget,
+                        },
+                        align: 'end',
+                        direction: 'bottom',
+                        gap: 4,
+                      });
+                      setIsContextMenuOpen(true);
+                    }}
+                    class={`time ${
+                      isContextMenuOpen && contextMenuProps?.anchorRef
+                        ? 'is-open'
+                        : ''
+                    }`}
+                  >
+                    {showCommentHint && !showCommentCount ? (
                       <Icon
-                        icon={visibilityIconsMap[visibility]}
-                        alt={visibilityText[visibility]}
+                        icon="comment2"
                         size="s"
+                        // alt={`${repliesCount} ${
+                        //   repliesCount === 1 ? 'reply' : 'replies'
+                        // }`}
+                        alt={plural(repliesCount, {
+                          one: '# reply',
+                          other: '# replies',
+                        })}
                       />
-                    )
-                  )}{' '}
-                  <RelativeTime datetime={createdAtDate} format="micro" />
-                  {!previewMode && !readOnly && (
-                    <Icon icon="more2" class="more" />
-                  )}
-                </Link>
-              ) : (
-                // <Menu
-                //   instanceRef={menuInstanceRef}
-                //   portal={{
-                //     target: document.body,
-                //   }}
-                //   containerProps={{
-                //     style: {
-                //       // Higher than the backdrop
-                //       zIndex: 1001,
-                //     },
-                //     onClick: (e) => {
-                //       if (e.target === e.currentTarget)
-                //         menuInstanceRef.current?.closeMenu?.();
-                //     },
-                //   }}
-                //   align="end"
-                //   gap={4}
-                //   overflow="auto"
-                //   viewScroll="close"
-                //   boundingBoxPadding="8 8 8 8"
-                //   unmountOnClose
-                //   menuButton={({ open }) => (
-                //     <Link
-                //       to={instance ? `/${instance}/s/${id}` : `/s/${id}`}
-                //       onClick={(e) => {
-                //         e.preventDefault();
-                //         e.stopPropagation();
-                //         onStatusLinkClick?.(e, status);
-                //       }}
-                //       class={`time ${open ? 'is-open' : ''}`}
-                //     >
-                //       <Icon
-                //         icon={visibilityIconsMap[visibility]}
-                //         alt={visibilityText[visibility]}
-                //         size="s"
-                //       />{' '}
-                //       <RelativeTime datetime={createdAtDate} format="micro" />
-                //     </Link>
-                //   )}
-                // >
-                //   {StatusMenuItems}
-                // </Menu>
-                <span class="time">
-                  {visibility !== 'public' && visibility !== 'direct' && (
-                    <>
-                      <Icon
-                        icon={visibilityIconsMap[visibility]}
-                        alt={visibilityText[visibility]}
-                        size="s"
-                      />{' '}
-                    </>
-                  )}
-                  <RelativeTime datetime={createdAtDate} format="micro" />
-                </span>
-              ))}
-          </div>
+                    ) : (
+                      visibility !== 'public' &&
+                      visibility !== 'direct' && (
+                        <Icon
+                          icon={visibilityIconsMap[visibility]}
+                          alt={_(visibilityText[visibility])}
+                          size="s"
+                        />
+                      )
+                    )}{' '}
+                    <RelativeTime datetime={createdAtDate} format="micro" />
+                    {!previewMode && !readOnly && (
+                      <Icon icon="more2" class="more" alt={t`More`} />
+                    )}
+                  </Link>
+                ) : (
+                  // <Menu
+                  //   instanceRef={menuInstanceRef}
+                  //   portal={{
+                  //     target: document.body,
+                  //   }}
+                  //   containerProps={{
+                  //     style: {
+                  //       // Higher than the backdrop
+                  //       zIndex: 1001,
+                  //     },
+                  //     onClick: (e) => {
+                  //       if (e.target === e.currentTarget)
+                  //         menuInstanceRef.current?.closeMenu?.();
+                  //     },
+                  //   }}
+                  //   align="end"
+                  //   gap={4}
+                  //   overflow="auto"
+                  //   viewScroll="close"
+                  //   boundingBoxPadding="8 8 8 8"
+                  //   unmountOnClose
+                  //   menuButton={({ open }) => (
+                  //     <Link
+                  //       to={instance ? `/${instance}/s/${id}` : `/s/${id}`}
+                  //       onClick={(e) => {
+                  //         e.preventDefault();
+                  //         e.stopPropagation();
+                  //         onStatusLinkClick?.(e, status);
+                  //       }}
+                  //       class={`time ${open ? 'is-open' : ''}`}
+                  //     >
+                  //       <Icon
+                  //         icon={visibilityIconsMap[visibility]}
+                  //         alt={visibilityText[visibility]}
+                  //         size="s"
+                  //       />{' '}
+                  //       <RelativeTime datetime={createdAtDate} format="micro" />
+                  //     </Link>
+                  //   )}
+                  // >
+                  //   {StatusMenuItems}
+                  // </Menu>
+                  <span class="time">
+                    {visibility !== 'public' && visibility !== 'direct' && (
+                      <>
+                        <Icon
+                          icon={visibilityIconsMap[visibility]}
+                          alt={_(visibilityText[visibility])}
+                          size="s"
+                        />{' '}
+                      </>
+                    )}
+                    <RelativeTime datetime={createdAtDate} format="micro" />
+                  </span>
+                ))}
+            </div>
+          )}
           {visibility === 'direct' && (
             <>
-              <div class="status-direct-badge">Private mention</div>{' '}
+              <div class="status-direct-badge">
+                <Trans>Private mention</Trans>
+              </div>{' '}
             </>
           )}
           {!withinContext && (
@@ -1765,10 +2210,12 @@ function Status({
               {isThread ? (
                 <div class="status-thread-badge">
                   <Icon icon="thread" size="s" />
-                  Thread
-                  {snapStates.statusThreadNumber[sKey]
-                    ? ` ${snapStates.statusThreadNumber[sKey]}/X`
-                    : ''}
+                  <Trans>
+                    Thread
+                    {snapStates.statusThreadNumber[sKey]
+                      ? ` ${snapStates.statusThreadNumber[sKey]}/X`
+                      : ''}
+                  </Trans>
                 </div>
               ) : (
                 !!inReplyToId &&
@@ -1791,7 +2238,9 @@ function Status({
           )}
           <div
             class={`content-container ${
-              spoilerText || sensitive ? 'has-spoiler' : ''
+              spoilerText || sensitive || filterInfo?.action === 'blur'
+                ? 'has-spoiler'
+                : ''
             } ${showSpoiler ? 'show-spoiler' : ''} ${
               showSpoilerMedia ? 'show-media' : ''
             }`}
@@ -1812,7 +2261,7 @@ function Status({
                         lang={language}
                         dir="auto"
                         ref={spoilerContentRef}
-                        data-read-more={readMoreText}
+                        data-read-more={_(readMoreText)}
                       >
                         <EmojiText text={spoilerText} emojis={emojis} />{' '}
                       </span>
@@ -1839,7 +2288,7 @@ function Status({
                       }}
                     >
                       <Icon icon={showSpoiler ? 'eye-open' : 'eye-close'} />{' '}
-                      {showSpoiler ? 'Show less' : 'Show content'}
+                      {showSpoiler ? t`Show less` : t`Show content`}
                     </button>
                   </>
                 )}
@@ -1868,7 +2317,7 @@ function Status({
                       lang={language}
                       dir="auto"
                       ref={spoilerContentRef}
-                      data-read-more={readMoreText}
+                      data-read-more={_(readMoreText)}
                     >
                       <p>
                         <EmojiText text={spoilerText} emojis={emojis} />
@@ -1876,7 +2325,7 @@ function Status({
                     </div>
                     {readingExpandSpoilers || previewMode ? (
                       <div class="spoiler-divider">
-                        <Icon icon="eye-open" /> Content warning
+                        <Icon icon="eye-open" /> <Trans>Content warning</Trans>
                       </div>
                     ) : (
                       <button
@@ -1901,7 +2350,7 @@ function Status({
                         }}
                       >
                         <Icon icon={showSpoiler ? 'eye-open' : 'eye-close'} />{' '}
-                        {showSpoiler ? 'Show less' : 'Show content'}
+                        {showSpoiler ? t`Show less` : t`Show content`}
                       </button>
                     )}
                   </>
@@ -1910,15 +2359,24 @@ function Status({
                   <div
                     class="content"
                     ref={contentRef}
-                    data-read-more={readMoreText}
+                    data-read-more={_(readMoreText)}
+                    inert={!!spoilerText && !showSpoiler ? true : undefined}
                   >
                     <PostContent
+                      key={reloadPostContentCount}
                       post={status}
                       instance={instance}
                       previewMode={previewMode}
                     />
                     <QuoteStatuses id={id} instance={instance} level={quoted} />
                   </div>
+                )}
+                {!!content && (
+                  <MathBlock
+                    content={content}
+                    contentRef={contentRef}
+                    onRevert={reloadPostContent}
+                  />
                 )}
                 {!!poll && (
                   <Poll
@@ -1951,8 +2409,7 @@ function Status({
                   />
                 )}
                 {(((enableTranslate || inlineTranslate) &&
-                  !!content.trim() &&
-                  !!getHTMLText(emojifyText(content, emojis)) &&
+                  isTranslateble(content, emojis) &&
                   differentLanguage) ||
                   forceTranslate) && (
                   <TranslationBlock
@@ -1960,13 +2417,17 @@ function Status({
                     mini={!isSizeLarge && !withinContext}
                     sourceLanguage={language}
                     autoDetected={languageAutoDetected}
-                    text={getPostText(status)}
+                    text={getPostText(status, {
+                      maskCustomEmojis: true,
+                      maskURLs: true,
+                    })}
                   />
                 )}
                 {!previewMode &&
-                  sensitive &&
+                  (sensitive || filterInfo?.action === 'blur') &&
                   !!mediaAttachments.length &&
-                  readingExpandMedia !== 'show_all' && (
+                  (readingExpandMedia !== 'show_all' ||
+                    filterInfo?.action === 'blur') && (
                     <button
                       class={`plain spoiler-media-button ${
                         showSpoilerMedia ? 'spoiling' : ''
@@ -1986,7 +2447,15 @@ function Status({
                       <Icon
                         icon={showSpoilerMedia ? 'eye-open' : 'eye-close'}
                       />{' '}
-                      {showSpoilerMedia ? 'Show less' : 'Show media'}
+                      <span>
+                        {filterInfo?.action === 'blur' && (
+                          <small>
+                            <Trans>Filtered: {filterInfo?.titlesStr}</Trans>
+                            <br />
+                          </small>
+                        )}
+                        {showSpoilerMedia ? t`Show less` : t`Show media`}
+                      </span>
                     </button>
                   )}
                 {!!mediaAttachments.length &&
@@ -1999,7 +2468,7 @@ function Status({
                             media={media}
                             autoAnimate
                             showCaption
-                            allowLongerCaption={!content}
+                            allowLongerCaption={!content || isSizeLarge}
                             lang={language}
                             to={`/${instance}/s/${id}?${
                               withinContext ? 'media' : 'media-only'
@@ -2052,6 +2521,7 @@ function Status({
                                   }
                                 : undefined
                             }
+                            checkAspectRatio={mediaAttachments.length === 1}
                           />
                         ))}
                       </div>
@@ -2069,6 +2539,9 @@ function Status({
                       selfReferential={
                         card?.url === status.url || card?.url === status.uri
                       }
+                      selfAuthor={card?.authors?.some(
+                        (a) => a.account?.url === accountURL,
+                      )}
                       instance={currentInstance}
                     />
                   )}
@@ -2077,34 +2550,51 @@ function Status({
           </div>
           {!isSizeLarge && showCommentCount && (
             <div class="content-comment-hint insignificant">
-              <Icon icon="comment2" alt="Replies" /> {repliesCount}
+              <Icon icon="comment2" alt={t`Replies`} /> {repliesCount}
             </div>
           )}
           {isSizeLarge && (
             <>
               <div class="extra-meta">
                 {_deleted ? (
-                  <span class="status-deleted-tag">Deleted</span>
+                  <span class="status-deleted-tag">
+                    <Trans>Deleted</Trans>
+                  </span>
                 ) : (
                   <>
                     {/* <Icon
                       icon={visibilityIconsMap[visibility]}
                       alt={visibilityText[visibility]}
                     /> */}
-                    <span>{visibilityText[visibility]}</span> &bull;{' '}
-                    <a href={url} target="_blank" rel="noopener noreferrer">
-                      <time
-                        class="created"
-                        datetime={createdAtDate.toISOString()}
-                        title={createdAtDate.toLocaleString()}
-                      >
-                        {createdDateText}
-                      </time>
+                    <span>{_(visibilityText[visibility])}</span> &bull;{' '}
+                    <a href={url} target="_blank" rel="noopener">
+                      {
+                        // within a day
+                        new Date().getTime() - createdAtDate.getTime() <
+                          86400000 && (
+                          <>
+                            <RelativeTime
+                              datetime={createdAtDate}
+                              format="micro"
+                            />{' '}
+                            ‒{' '}
+                          </>
+                        )
+                      }
+                      {!!createdAt && (
+                        <time
+                          class="created"
+                          datetime={createdAtDate.toISOString()}
+                          title={createdAtDate.toLocaleString()}
+                        >
+                          {createdDateText}
+                        </time>
+                      )}
                     </a>
                     {editedAt && (
                       <>
                         {' '}
-                        &bull; <Icon icon="pencil" alt="Edited" />{' '}
+                        &bull; <Icon icon="pencil" alt={t`Edited`} />{' '}
                         <time
                           tabIndex="0"
                           class="edited"
@@ -2180,8 +2670,8 @@ function Status({
               <div class={`actions ${_deleted ? 'disabled' : ''}`}>
                 <div class="action has-count">
                   <StatusButton
-                    title="Reply"
-                    alt="Comments"
+                    title={t`Reply`}
+                    alt={t`Comments`}
                     class="reply-button"
                     icon="comment"
                     count={repliesCount}
@@ -2200,57 +2690,51 @@ function Status({
                   disabled={!canBoost}
                 />
               </div> */}
-                <MenuConfirm
-                  disabled={!canBoost}
-                  onClick={confirmBoostStatus}
-                  confirmLabel={
-                    <>
-                      <Icon icon="rocket" />
-                      <span>{reblogged ? 'Unboost' : 'Boost'}</span>
-                    </>
-                  }
-                  menuExtras={
-                    <MenuItem
-                      onClick={() => {
-                        showCompose({
-                          draftStatus: {
-                            status: `\n${url}`,
-                          },
-                        });
-                      }}
-                    >
-                      <Icon icon="quote" />
-                      <span>Quote</span>
-                    </MenuItem>
-                  }
-                  menuFooter={
-                    mediaNoDesc &&
-                    !reblogged && (
-                      <div class="footer">
-                        <Icon icon="alert" />
-                        Some media have no descriptions.
-                      </div>
-                    )
-                  }
-                >
-                  <div class="action has-count">
+                <div class="action has-count">
+                  <MenuConfirm
+                    disabled={!canBoost}
+                    onClick={confirmBoostStatus}
+                    confirmLabel={
+                      <>
+                        <Icon icon="rocket" />
+                        <span>{reblogged ? t`Unboost` : t`Boost`}</span>
+                      </>
+                    }
+                    menuExtras={
+                      <MenuItem
+                        onClick={() => {
+                          showCompose({
+                            draftStatus: {
+                              status: `\n${url}`,
+                            },
+                          });
+                        }}
+                      >
+                        <Icon icon="quote" />
+                        <span>
+                          <Trans>Quote</Trans>
+                        </span>
+                      </MenuItem>
+                    }
+                    menuFooter={menuFooter}
+                  >
                     <StatusButton
                       checked={reblogged}
-                      title={['Boost', 'Unboost']}
-                      alt={['Boost', 'Boosted']}
+                      title={[t`Boost`, t`Unboost`]}
+                      alt={[t`Boost`, t`Boosted`]}
                       class="reblog-button"
                       icon="rocket"
                       count={reblogsCount}
                       // onClick={boostStatus}
                       disabled={!canBoost}
                     />
-                  </div>
-                </MenuConfirm>
+                  </MenuConfirm>
+                </div>
                 <div class="action has-count">
                   <StatusButton
                     checked={favourited}
-                    title={['Like', 'Unlike']}
-                    alt={['Like', 'Liked']}
+                    title={[t`Like`, t`Unlike`]}
+                    alt={[t`Like`, t`Liked`]}
                     class="favourite-button"
                     icon="heart"
                     count={favouritesCount}
@@ -2261,8 +2745,8 @@ function Status({
                   <div class="action">
                     <StatusButton
                       checked={bookmarked}
-                      title={['Bookmark', 'Unbookmark']}
-                      alt={['Bookmark', 'Bookmarked']}
+                      title={[t`Bookmark`, t`Unbookmark`]}
+                      alt={[t`Bookmark`, t`Bookmarked`]}
                       class="bookmark-button"
                       icon="bookmark"
                       onClick={bookmarkStatus}
@@ -2282,15 +2766,15 @@ function Status({
                     <div class="action">
                       <button
                         type="button"
-                        title="More"
+                        title={t`More`}
                         class="plain more-button"
                       >
-                        <Icon icon="more" size="l" alt="More" />
+                        <Icon icon="more" size="l" alt={t`More`} />
                       </button>
                     </div>
                   }
                 >
-                  {StatusMenuItems}
+                  {StatusMenuItems}{' '}
                 </Menu2>
               </div>
             </>
@@ -2461,23 +2945,42 @@ function MediaFirstContainer(props) {
   );
 }
 
-function getDomain(url) {
-  return punycode.toUnicode(
-    URL.parse(url)
-      .hostname.replace(/^www\./, '')
-      .replace(/\/$/, ''),
-  );
-}
-
 // "Post": Quote post + card link preview combo
 // Assume all links from these domains are "posts"
 // Mastodon links are "posts" too but they are converted to real quote posts and there's too many domains to check
 // This is just "Progressive Enhancement"
 function isCardPost(domain) {
-  return ['x.com', 'twitter.com', 'threads.net', 'bsky.app'].includes(domain);
+  return [
+    'x.com',
+    'twitter.com',
+    'threads.net',
+    'bsky.app',
+    'bsky.brid.gy',
+    'fed.brid.gy',
+  ].includes(domain);
 }
 
-function Card({ card, selfReferential, instance }) {
+function Byline({ authors, hidden, children }) {
+  if (hidden) return children;
+  if (!authors?.[0]?.account?.id) return children;
+  const author = authors[0].account;
+
+  return (
+    <div class="card-byline">
+      {children}
+      <div class="card-byline-author">
+        <Icon icon="link" size="s" />{' '}
+        <small>
+          <Trans comment="More from [Author]">
+            More from <NameText account={author} showAvatar />
+          </Trans>
+        </small>
+      </div>
+    </div>
+  );
+}
+
+function Card({ card, selfReferential, selfAuthor, instance }) {
   const snapStates = useSnapshot(states);
   const {
     blurhash,
@@ -2497,6 +3000,7 @@ function Card({ card, selfReferential, instance }) {
     embedUrl,
     language,
     publishedAt,
+    authors,
   } = card;
 
   /* type
@@ -2554,9 +3058,9 @@ function Card({ card, selfReferential, instance }) {
     [hasIframeHTML],
   );
 
+  const [blurhashImage, setBlurhashImage] = useState(null);
   if (hasText && (image || (type === 'photo' && blurhash))) {
     const domain = getDomain(url);
-    let blurhashImage;
     const rgbAverageColor =
       image && blurhash ? getBlurHashAverageColor(blurhash) : null;
     if (!image) {
@@ -2573,73 +3077,91 @@ function Card({ card, selfReferential, instance }) {
       const imageData = ctx.createImageData(w, h);
       imageData.data.set(blurhashPixels);
       ctx.putImageData(imageData, 0, 0);
-      blurhashImage = canvas.toDataURL();
+      try {
+        if (window.OffscreenCanvas) {
+          canvas.convertToBlob().then((blob) => {
+            setBlurhashImage(URL.createObjectURL(blob));
+          });
+        } else {
+          setBlurhashImage(canvas.toDataURL());
+        }
+      } catch (e) {
+        // Silently fail
+        console.error(e);
+      }
     }
 
     const isPost = isCardPost(domain);
 
     return (
-      <a
-        href={cardStatusURL || url}
-        target={cardStatusURL ? null : '_blank'}
-        rel="nofollow noopener noreferrer"
-        class={`card link ${isPost ? 'card-post' : ''} ${
-          blurhashImage ? '' : size
-        }`}
-        style={{
-          '--average-color':
-            rgbAverageColor && `rgb(${rgbAverageColor.join(',')})`,
-        }}
-        onClick={handleClick}
-      >
-        <div class="card-image">
-          <img
-            src={image || blurhashImage}
-            width={width}
-            height={height}
-            loading="lazy"
-            alt={imageDescription || ''}
-            onError={(e) => {
-              try {
-                e.target.style.display = 'none';
-              } catch (e) {}
-            }}
-            style={{
-              '--anim-duration':
-                width &&
-                height &&
-                `${Math.min(Math.max(Math.max(width, height) / 100, 5), 120)}s`,
-            }}
-          />
-        </div>
-        <div class="meta-container" lang={language}>
-          <p class="meta domain">
-            <span class="domain">{domain}</span>{' '}
-            {!!publishedAt && <>&middot; </>}
-            {!!publishedAt && (
-              <>
-                <RelativeTime datetime={publishedAt} format="micro" />
-              </>
-            )}
-          </p>
-          <p class="title" dir="auto" title={title}>
-            {title}
-          </p>
-          <p class="meta" dir="auto" title={description}>
-            {description ||
-              (!!publishedAt && (
-                <RelativeTime datetime={publishedAt} format="micro" />
-              ))}
-          </p>
-        </div>
-      </a>
+      <Byline hidden={!!selfAuthor} authors={authors}>
+        <a
+          href={cardStatusURL || url}
+          target={cardStatusURL ? null : '_blank'}
+          rel="nofollow noopener"
+          class={`card link ${isPost ? 'card-post' : ''} ${
+            blurhashImage ? '' : size
+          }`}
+          style={{
+            '--average-color':
+              rgbAverageColor && `rgb(${rgbAverageColor.join(',')})`,
+          }}
+          onClick={handleClick}
+        >
+          <div class="card-image">
+            <img
+              src={image || blurhashImage}
+              width={width}
+              height={height}
+              loading="lazy"
+              decoding="async"
+              fetchPriority="low"
+              alt={imageDescription || ''}
+              onError={(e) => {
+                try {
+                  e.target.style.display = 'none';
+                } catch (e) {}
+              }}
+              style={{
+                '--anim-duration':
+                  width &&
+                  height &&
+                  `${Math.min(
+                    Math.max(Math.max(width, height) / 100, 5),
+                    120,
+                  )}s`,
+              }}
+            />
+          </div>
+          <div class="meta-container" lang={language}>
+            <p class="meta domain">
+              <span class="domain">{domain}</span>{' '}
+              {!!publishedAt && <>&middot; </>}
+              {!!publishedAt && (
+                <>
+                  <RelativeTime datetime={publishedAt} format="micro" />
+                </>
+              )}
+            </p>
+            <p class="title" dir="auto" title={title}>
+              {title}
+            </p>
+            <p class="meta" dir="auto" title={description}>
+              {description ||
+                (!!publishedAt && (
+                  <RelativeTime datetime={publishedAt} format="micro" />
+                ))}
+            </p>
+          </div>
+        </a>
+      </Byline>
     );
   } else if (type === 'photo') {
     return (
       <a
         href={url}
         target="_blank"
-        rel="nofollow noopener noreferrer"
+        rel="nofollow noopener"
         class="card photo"
         onClick={handleClick}
       >
@@ -2664,7 +3186,7 @@ function Card({ card, selfReferential, instance }) {
         if (videoID) {
           return (
             <a class="card video" onClick={handleClick}>
-              <lite-youtube videoid={videoID} nocookie></lite-youtube>
+              <lite-youtube videoid={videoID} nocookie autoPause></lite-youtube>
             </a>
           );
         }
@@ -2686,7 +3208,7 @@ function Card({ card, selfReferential, instance }) {
         <a
           href={cardStatusURL || url}
           target={cardStatusURL ? null : '_blank'}
-          rel="nofollow noopener noreferrer"
+          rel="nofollow noopener"
           class={`card link ${isPost ? 'card-post' : ''} no-image`}
           lang={language}
           dir="auto"
@@ -2723,6 +3245,7 @@ function EditedAtModal({
   fetchStatusHistory = () => {},
   onClose,
 }) {
+  const { t } = useLingui();
   const [uiState, setUIState] = useState('default');
   const [editHistory, setEditHistory] = useState([]);
 
@@ -2745,15 +3268,21 @@ function EditedAtModal({
     <div id="edit-history" class="sheet">
       {!!onClose && (
         <button type="button" class="sheet-close" onClick={onClose}>
-          <Icon icon="x" />
+          <Icon icon="x" alt={t`Close`} />
         </button>
       )}
       <header>
-        <h2>Edit History</h2>
-        {uiState === 'error' && <p>Failed to load history</p>}
+        <h2>
+          <Trans>Edit History</Trans>
+        </h2>
+        {uiState === 'error' && (
+          <p>
+            <Trans>Failed to load history</Trans>
+          </p>
+        )}
         {uiState === 'loading' && (
           <p>
-            <Loader abrupt /> Loading&hellip;
+            <Loader abrupt /> <Trans>Loading…</Trans>
           </p>
         )}
       </header>
@@ -2917,8 +3446,8 @@ function generateHTMLCode(post, instance, level = 0) {
             } else {
               mediaHTML = `
                 <a href="${sourceMediaURL}">📄 ${
-                description || sourceMediaURL
-              }</a>
+                  description || sourceMediaURL
+                }</a>
               `;
             }
 
@@ -2928,7 +3457,7 @@ function generateHTMLCode(post, instance, level = 0) {
       : '');
 
   const htmlCode = `
-    <blockquote lang="${language}" cite="${url}">
+    <blockquote lang="${language}" cite="${url}" data-source="fediverse">
       ${
         spoilerText
           ? `
@@ -2943,7 +3472,7 @@ function generateHTMLCode(post, instance, level = 0) {
         — ${emojifyText(
           displayName,
           accountEmojis,
-        )} (@${acct}) <a href="${url}"><time datetime="${createdAtDate.toISOString()}">${createdAtDate.toLocaleString()}</time></a>
+        )} (@${acct}) ${!!createdAt ? `<a href="${url}"><time datetime="${createdAtDate.toISOString()}">${createdAtDate.toLocaleString()}</time></a>` : ''}
       </footer>
     </blockquote>
   `;
@@ -2952,6 +3481,7 @@ function generateHTMLCode(post, instance, level = 0) {
 }
 
 function EmbedModal({ post, instance, onClose }) {
+  const { t } = useLingui();
   const {
     account: {
       url: accountURL,
@@ -2978,14 +3508,18 @@ function EmbedModal({ post, instance, onClose }) {
     <div id="embed-post" class="sheet">
       {!!onClose && (
         <button type="button" class="sheet-close" onClick={onClose}>
-          <Icon icon="x" />
+          <Icon icon="x" alt={t`Close`} />
         </button>
       )}
       <header>
-        <h2>Embed post</h2>
+        <h2>
+          <Trans>Embed post</Trans>
+        </h2>
       </header>
       <main tabIndex="-1">
-        <h3>HTML Code</h3>
+        <h3>
+          <Trans>HTML Code</Trans>
+        </h3>
         <textarea
           class="embed-code"
           readonly
@@ -3001,18 +3535,23 @@ function EmbedModal({ post, instance, onClose }) {
           onClick={() => {
             try {
               navigator.clipboard.writeText(htmlCode);
-              showToast('HTML code copied');
+              showToast(t`HTML code copied`);
             } catch (e) {
               console.error(e);
-              showToast('Unable to copy HTML code');
+              showToast(t`Unable to copy HTML code`);
             }
           }}
         >
-          <Icon icon="clipboard" /> <span>Copy</span>
+          <Icon icon="clipboard" />{' '}
+          <span>
+            <Trans>Copy</Trans>
+          </span>
         </button>
         {!!mediaAttachments?.length && (
           <section>
-            <p>Media attachments:</p>
+            <p>
+              <Trans>Media attachments:</Trans>
+            </p>
             <ol class="links-list">
               {mediaAttachments.map((media) => {
                 return (
@@ -3032,7 +3571,9 @@ function EmbedModal({ post, instance, onClose }) {
         )}
         {!!accountEmojis?.length && (
           <section>
-            <p>Account Emojis:</p>
+            <p>
+              <Trans>Account Emojis:</Trans>
+            </p>
             <ul>
               {accountEmojis.map((emoji) => {
                 return (
@@ -3054,7 +3595,7 @@ function EmbedModal({ post, instance, onClose }) {
                     </picture>{' '}
                     <code>:{emoji.shortcode}:</code> (
                     <a href={emoji.url} target="_blank" download>
-                      url
+                      URL
                     </a>
                     )
                     {emoji.staticUrl ? (
@@ -3062,7 +3603,7 @@ function EmbedModal({ post, instance, onClose }) {
                         {' '}
                         (
                         <a href={emoji.staticUrl} target="_blank" download>
-                          static
+                          <Trans>static URL</Trans>
                         </a>
                         )
                       </>
@@ -3075,7 +3616,9 @@ function EmbedModal({ post, instance, onClose }) {
         )}
         {!!emojis?.length && (
           <section>
-            <p>Emojis:</p>
+            <p>
+              <Trans>Emojis:</Trans>
+            </p>
             <ul>
               {emojis.map((emoji) => {
                 return (
@@ -3097,7 +3640,7 @@ function EmbedModal({ post, instance, onClose }) {
                     </picture>{' '}
                     <code>:{emoji.shortcode}:</code> (
                     <a href={emoji.url} target="_blank" download>
-                      url
+                      URL
                     </a>
                     )
                     {emoji.staticUrl ? (
@@ -3105,7 +3648,7 @@ function EmbedModal({ post, instance, onClose }) {
                         {' '}
                         (
                         <a href={emoji.staticUrl} target="_blank" download>
-                          static
+                          <Trans>static URL</Trans>
                         </a>
                         )
                       </>
@@ -3118,49 +3661,64 @@ function EmbedModal({ post, instance, onClose }) {
         )}
         <section>
           <small>
-            <p>Notes:</p>
+            <p>
+              <Trans>Notes:</Trans>
+            </p>
             <ul>
               <li>
-                This is static, unstyled and scriptless. You may need to apply
-                your own styles and edit as needed.
+                <Trans>
+                  This is static, unstyled and scriptless. You may need to apply
+                  your own styles and edit as needed.
+                </Trans>
               </li>
               <li>
-                Polls are not interactive, becomes a list with vote counts.
+                <Trans>
+                  Polls are not interactive, becomes a list with vote counts.
+                </Trans>
               </li>
               <li>
-                Media attachments can be images, videos, audios or any file
-                types.
+                <Trans>
+                  Media attachments can be images, videos, audios or any file
+                  types.
+                </Trans>
               </li>
-              <li>Post could be edited or deleted later.</li>
+              <li>
+                <Trans>Post could be edited or deleted later.</Trans>
+              </li>
             </ul>
           </small>
         </section>
-        <h3>Preview</h3>
+        <h3>
+          <Trans>Preview</Trans>
+        </h3>
         <output
           class="embed-preview"
           dangerouslySetInnerHTML={{ __html: htmlCode }}
           dir="auto"
         />
         <p>
-          <small>Note: This preview is lightly styled.</small>
+          <small>
+            <Trans>Note: This preview is lightly styled.</Trans>
+          </small>
         </p>
       </main>
     </div>
   );
 }
 
-function StatusButton({
-  checked,
-  count,
-  class: className,
-  title,
-  alt,
-  size,
-  icon,
-  iconSize = 'l',
-  onClick,
-  ...props
-}) {
+const StatusButton = forwardRef((props, ref) => {
+  let {
+    checked,
+    count,
+    class: className,
+    title,
+    alt,
+    size,
+    icon,
+    iconSize = 'l',
+    onClick,
+    ...otherProps
+  } = props;
   if (typeof title === 'string') {
     title = [title, title];
   }
@@ -3183,6 +3741,7 @@ function StatusButton({
 
   return (
     <button
+      ref={ref}
       type="button"
       title={buttonTitle}
       class={`plain ${size ? 'small' : ''} ${className} ${
@@ -3194,7 +3753,7 @@ function StatusButton({
         e.stopPropagation();
         onClick(e);
       }}
-      {...props}
+      {...otherProps}
     >
       <Icon icon={icon} size={iconSize} alt={iconAlt} />
       {!!count && (
@@ -3205,11 +3764,12 @@ function StatusButton({
       )}
     </button>
   );
-}
+});
 
 function nicePostURL(url) {
   if (!url) return;
   const urlObj = URL.parse(url);
+  if (!urlObj) return;
   const { host, pathname } = urlObj;
   const path = pathname.replace(/\/$/, '');
   // split only first slash
@@ -3240,6 +3800,7 @@ function StatusCompact({ sKey }) {
   if (!status) return null;
 
   const {
+    account: { id: accountId },
     sensitive,
     spoilerText,
     account: { avatar, avatarStatic, bot } = {},
@@ -3254,8 +3815,15 @@ function StatusCompact({ sKey }) {
   const srKey = statusKey(id, instance);
   const statusPeekText = statusPeek(status);
 
+  const currentAccount = getCurrentAccID();
+  const isSelf = currentAccount && currentAccount === accountId;
+
   const filterContext = useContext(FilterContext);
-  const filterInfo = isFiltered(filtered, filterContext);
+  let filterInfo = !isSelf && isFiltered(filtered, filterContext);
+
+  // This is fine. Images are converted to emojis so they are
+  // in a way, already "obscured"
+  if (filterInfo?.action === 'blur') filterInfo = null;
 
   if (filterInfo?.action === 'hide') return null;
 
@@ -3263,7 +3831,7 @@ function StatusCompact({ sKey }) {
 
   return (
     <article
-      class={`status compact-reply ${
+      class={`status compact-reply shazam ${
         visibility === 'direct' ? 'visibility-direct' : ''
       }`}
       tabindex="-1"
@@ -3278,7 +3846,9 @@ function StatusCompact({ sKey }) {
       >
         {filterInfo ? (
           <b class="status-filtered-badge badge-meta" title={filterTitleStr}>
-            <span>Filtered</span>
+            <span>
+              <Trans>Filtered</Trans>
+            </span>
             <span>{filterTitleStr}</span>
           </b>
         ) : (
@@ -3297,6 +3867,7 @@ function FilteredStatus({
   showFollowedTags,
   quoted,
 }) {
+  const { _, t } = useLingui();
   const snapStates = useSnapshot(states);
   const {
     id: statusID,
@@ -3339,17 +3910,17 @@ function FilteredStatus({
 
   return (
     <div
-      class={
+      class={`${
         quoted
           ? ''
           : isReblog
-          ? group
-            ? 'status-group'
-            : 'status-reblog'
-          : isFollowedTags
-          ? 'status-followed-tags'
-          : ''
-      }
+            ? group
+              ? 'status-group'
+              : 'status-reblog'
+            : isFollowedTags
+              ? 'status-followed-tags'
+              : ''
+      } visibility-${visibility}`}
       {...containerProps}
       // title={statusPeekText}
       onContextMenu={(e) => {
@@ -3371,30 +3942,52 @@ function FilteredStatus({
             setShowPeek(true);
           }}
         >
-          <span>Filtered</span>
+          <span>
+            <Trans>Filtered</Trans>
+          </span>
           <span>{filterTitleStr}</span>
         </b>{' '}
         <Avatar url={avatarStatic || avatar} squircle={bot} />
         <span class="status-filtered-info">
           <span class="status-filtered-info-1">
-            <NameText account={status.account} instance={instance} />{' '}
-            <Icon
-              icon={visibilityIconsMap[visibility]}
-              alt={visibilityText[visibility]}
-              size="s"
-            />{' '}
             {isReblog ? (
-              'boosted'
+              <Trans comment="[Name] [Visibility icon] boosted">
+                <NameText account={status.account} instance={instance} />{' '}
+                <Icon
+                  icon={visibilityIconsMap[visibility]}
+                  alt={_(visibilityText[visibility])}
+                  size="s"
+                />{' '}
+                boosted
+              </Trans>
             ) : isFollowedTags ? (
-              <span>
-                {snapStates.statusFollowedTags[sKey].slice(0, 3).map((tag) => (
-                  <span key={tag} class="status-followed-tag-item">
-                    #{tag}
-                  </span>
-                ))}
-              </span>
+              <>
+                <NameText account={status.account} instance={instance} />{' '}
+                <Icon
+                  icon={visibilityIconsMap[visibility]}
+                  alt={_(visibilityText[visibility])}
+                  size="s"
+                />{' '}
+                <span>
+                  {snapStates.statusFollowedTags[sKey]
+                    .slice(0, 3)
+                    .map((tag) => (
+                      <span key={tag} class="status-followed-tag-item">
+                        #{tag}
+                      </span>
+                    ))}
+                </span>
+              </>
             ) : (
-              <RelativeTime datetime={createdAtDate} format="micro" />
+              <>
+                <NameText account={status.account} instance={instance} />{' '}
+                <Icon
+                  icon={visibilityIconsMap[visibility]}
+                  alt={_(visibilityText[visibility])}
+                  size="s"
+                />{' '}
+                <RelativeTime datetime={createdAtDate} format="micro" />
+              </>
             )}
           </span>
           <span class="status-filtered-info-2">
@@ -3424,10 +4017,13 @@ function FilteredStatus({
               class="sheet-close"
               onClick={() => setShowPeek(false)}
             >
-              <Icon icon="x" />
+              <Icon icon="x" alt={t`Close`} />
             </button>
             <header>
-              <b class="status-filtered-badge">Filtered</b> {filterTitleStr}
+              <b class="status-filtered-badge">
+                <Trans>Filtered</Trans>
+              </b>{' '}
+              {filterTitleStr}
             </header>
             <main tabIndex="-1">
               <Link
@@ -3437,7 +4033,7 @@ function FilteredStatus({
                 onClick={() => {
                   setShowPeek(false);
                 }}
-                data-read-more="Read more →"
+                data-read-more={_(readMoreText)}
               >
                 <Status status={status} instance={instance} size="s" readOnly />
               </Link>
@@ -3449,8 +4045,25 @@ function FilteredStatus({
   );
 }
 
+const handledUnfulfilledStates = [
+  'deleted',
+  'unauthorized',
+  'pending',
+  'rejected',
+  'revoked',
+];
+const unfulfilledText = {
+  filterHidden: msg`Post hidden by your filters`,
+  pending: msg`Post pending`,
+  deleted: msg`Post unavailable`,
+  unauthorized: msg`Post unavailable`,
+  rejected: msg`Post unavailable`,
+  revoked: msg`Post unavailable`,
+};
+
 const QuoteStatuses = memo(({ id, instance, level = 0 }) => {
   if (!id || !instance) return;
+  const { _ } = useLingui();
   const snapStates = useSnapshot(states);
   const sKey = statusKey(id, instance);
   const quotes = snapStates.statusQuotes[sKey];
@@ -3461,14 +4074,51 @@ const QuoteStatuses = memo(({ id, instance, level = 0 }) => {
   if (!uniqueQuotes?.length) return;
   if (level > 2) return;
 
+  const filterContext = useContext(FilterContext);
+  const currentAccount = getCurrentAccID();
+
   return uniqueQuotes.map((q) => {
+    let unfulfilledState;
+
+    const quoteStatus = snapStates.statuses[statusKey(q.id, q.instance)];
+    if (quoteStatus) {
+      const isSelf =
+        currentAccount && currentAccount === quoteStatus.account?.id;
+      const filterInfo =
+        !isSelf && isFiltered(quoteStatus.filtered, filterContext);
+
+      if (filterInfo?.action === 'hide') {
+        unfulfilledState = 'filterHidden';
+      }
+    }
+
+    if (!unfulfilledState) {
+      unfulfilledState = handledUnfulfilledStates.find(
+        (state) => q.state === state,
+      );
+    }
+
+    if (unfulfilledState) {
+      return (
+        <div
+          class={`status-card-unfulfilled ${
+            unfulfilledState === 'filterHidden' ? 'status-card-ghost' : ''
+          }`}
+        >
+          <Icon icon="quote" />
+          <i>{_(unfulfilledText[unfulfilledState])}</i>
+        </div>
+      );
+    }
+
+    const Parent = q.native ? Fragment : LazyShazam;
     return (
-      <LazyShazam id={q.instance + q.id}>
+      <Parent id={q.instance + q.id} key={q.instance + q.id}>
         <Link
           key={q.instance + q.id}
           to={`${q.instance ? `/${q.instance}` : ''}/s/${q.id}`}
-          class="status-card-link"
-          data-read-more="Read more →"
+          class={`status-card-link ${q.native ? 'quote-post-native' : ''}`}
+          data-read-more={_(readMoreText)}
         >
           <Status
             statusID={q.id}
@@ -3478,7 +4128,7 @@ const QuoteStatuses = memo(({ id, instance, level = 0 }) => {
             enableCommentHint
           />
         </Link>
-      </LazyShazam>
+      </Parent>
     );
   });
 });
