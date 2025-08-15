@@ -23,12 +23,14 @@ const ctx = canvas.getContext('2d', {
 });
 ctx.imageSmoothingEnabled = false;
 
-function Avatar({ url, size, alt = '', squircle, ...props }) {
+const MISSING_IMAGE_PATH_REGEX = /missing\.png$/;
+
+function Avatar({ url, staticUrl, size, alt = '', squircle, ...props }) {
   size = SIZES[size] || size || SIZES.m;
   const avatarRef = useRef();
-  const isMissing = /missing\.png$/.test(url);
+  const isMissing = MISSING_IMAGE_PATH_REGEX.test(url);
   return (
-    <span
+    <picture
       ref={avatarRef}
       class={`avatar ${squircle ? 'squircle' : ''} ${
         alphaCache[url] ? 'has-alpha' : ''
@@ -40,6 +42,9 @@ function Avatar({ url, size, alt = '', squircle, ...props }) {
       title={alt}
       {...props}
     >
+      {!!staticUrl && (
+        <source srcset={staticUrl} media="(prefers-reduced-motion: reduce)" />
+      )}
       {!!url && (
         <img
           src={url}
@@ -48,6 +53,7 @@ function Avatar({ url, size, alt = '', squircle, ...props }) {
           alt={alt}
           loading="lazy"
           decoding="async"
+          fetchPriority="low"
           crossOrigin={
             alphaCache[url] === undefined && !isMissing
               ? 'anonymous'
@@ -92,7 +98,7 @@ function Avatar({ url, size, alt = '', squircle, ...props }) {
           }}
         />
       )}
-    </span>
+    </picture>
   );
 }
 

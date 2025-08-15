@@ -1,5 +1,7 @@
 import './account-info.css';
 
+import { msg, plural } from '@lingui/core/macro';
+import { Plural, Trans, useLingui } from '@lingui/react/macro';
 import { MenuDivider, MenuItem } from '@szhsin/react-menu';
 import {
   useCallback,
@@ -13,17 +15,25 @@ import punycode from 'punycode/';
 
 import { api } from '../utils/api';
 import enhanceContent from '../utils/enhance-content';
+import getDomain from '../utils/get-domain';
 import getHTMLText from '../utils/getHTMLText';
 import handleContentLinks from '../utils/handle-content-links';
+import i18nDuration from '../utils/i18n-duration';
 import { getLists } from '../utils/lists';
 import niceDateTime from '../utils/nice-date-time';
 import pmem from '../utils/pmem';
+import { fetchRelationships } from '../utils/relationships';
 import shortenNumber from '../utils/shorten-number';
 import showCompose from '../utils/show-compose';
 import showToast from '../utils/show-toast';
-import states, { hideAllModals } from '../utils/states';
+import states from '../utils/states';
 import store from '../utils/store';
-import { getCurrentAccountID, updateAccount } from '../utils/store-utils';
+import {
+  getAccounts,
+  getCurrentAccountID,
+  saveAccounts,
+  updateAccount,
+} from '../utils/store-utils';
 import supports from '../utils/supports';
 
 import AccountBlock from './account-block';
@@ -34,7 +44,6 @@ import Link from './link';
 import ListAddEdit from './list-add-edit';
 import Loader from './loader';
 import MenuConfirm from './menu-confirm';
-import MenuLink from './menu-link';
 import Menu2 from './menu2';
 import Modal from './modal';
 import SubMenu2 from './submenu2';
@@ -48,17 +57,19 @@ const MUTE_DURATIONS = [
   60 * 60 * 24, // 1 day
   60 * 60 * 24 * 3, // 3 days
   60 * 60 * 24 * 7, // 1 week
+  60 * 60 * 24 * 30, // 30 days
   0, // forever
 ];
 const MUTE_DURATIONS_LABELS = {
-  0: 'Forever',
-  300: '5 minutes',
-  1_800: '30 minutes',
-  3_600: '1 hour',
-  21_600: '6 hours',
-  86_400: '1 day',
-  259_200: '3 days',
-  604_800: '1 week',
+  0: msg`Forever`,
+  300: i18nDuration(5, 'minute'),
+  1_800: i18nDuration(30, 'minute'),
+  3_600: i18nDuration(1, 'hour'),
+  21_600: i18nDuration(6, 'hour'),
+  86_400: i18nDuration(1, 'day'),
+  259_200: i18nDuration(3, 'day'),
+  604_800: i18nDuration(1, 'week'),
+  2592_000: i18nDuration(30, 'day'),
 };
 
 const LIMIT = 80;
@@ -80,6 +91,7 @@ async function fetchPostingStats(accountID, masto) {
     .statuses.list({
       limit: 20,
     })
+    .values()
     .next();
 
   const { value: statuses } = await fetchStatuses;
@@ -123,14 +135,18 @@ const memFetchPostingStats = pmem(fetchPostingStats, {
   maxAge: ACCOUNT_INFO_MAX_AGE,
 });
 
+const ENDORSEMENTS_LIMIT = 80;
+
 function AccountInfo({
   account,
   fetchAccount = () => {},
   standalone,
   instance,
   authenticated,
+  showEndorsements = false,
 }) {
-  const { masto } = api({
+  const { i18n, t } = useLingui();
+  const { masto, authenticated: currentAuthenticated } = api({
     instance,
   });
   const { masto: currentMasto, instance: currentInstance } = api();
@@ -214,7 +230,7 @@ function AccountInfo({
       info?.url
     );
     if (isSelf && instance && infoHasEssentials) {
-      const accounts = store.local.getJSON('accounts');
+      const accounts = getAccounts();
       let updated = false;
       accounts.forEach((account) => {
         if (account.info.id === info.id && account.instanceURL === instance) {
@@ -224,16 +240,12 @@ function AccountInfo({
       });
       if (updated) {
         console.log('Updated account info', info);
-        store.local.setJSON('accounts', accounts);
+        saveAccounts(accounts);
       }
     }
   }, [isSelf, info, instance]);
 
-  const accountInstance = useMemo(() => {
-    if (!url) return null;
-    const domain = punycode.toUnicode(URL.parse(url).hostname);
-    return domain;
-  }, [url]);
+  const accountInstance = getDomain(url);
 
   const [headerCornerColors, setHeaderCornerColors] = useState([]);
 
@@ -241,9 +253,12 @@ function AccountInfo({
   const familiarFollowersCache = useRef([]);
   async function fetchFollowers(firstLoad) {
     if (firstLoad || !followersIterator.current) {
-      followersIterator.current = masto.v1.accounts.$select(id).followers.list({
-        limit: LIMIT,
-      });
+      followersIterator.current = masto.v1.accounts
+        .$select(id)
+        .followers.list({
+          limit: LIMIT,
+        })
+        .values();
     }
     const results = await followersIterator.current.next();
     if (isSelf) return results;
@@ -288,9 +303,12 @@ function AccountInfo({
   const followingIterator = useRef();
   async function fetchFollowing(firstLoad) {
     if (firstLoad || !followingIterator.current) {
-      followingIterator.current = masto.v1.accounts.$select(id).following.list({
-        limit: LIMIT,
-      });
+      followingIterator.current = masto.v1.accounts
+        .$select(id)
+        .following.list({
+          limit: LIMIT,
+        })
+        .values();
     }
     const results = await followingIterator.current.next();
     return results;
@@ -356,530 +374,702 @@ function AccountInfo({
     [id, instance],
   );
 
+  const isStringURL = isString && account && /^https?:\/\//.test(account);
+
+  const [showEditProfile, setShowEditProfile] = useState(false);
+
+  const [renderEndorsements, setRenderEndorsements] = useState(false);
+
   return (
-    <div
-      tabIndex="-1"
-      class={`account-container ${uiState === 'loading' ? 'skeleton' : ''}`}
-      style={{
-        '--header-color-1': headerCornerColors[0],
-        '--header-color-2': headerCornerColors[1],
-        '--header-color-3': headerCornerColors[2],
-        '--header-color-4': headerCornerColors[3],
-      }}
-    >
-      {uiState === 'error' && (
-        <div class="ui-state">
-          <p>Unable to load account.</p>
-          <p>
-            <a
-              href={isString ? account : url}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Go to account page <Icon icon="external" />
-            </a>
-          </p>
-        </div>
-      )}
-      {uiState === 'loading' ? (
-        <>
-          <header>
-            <AccountBlock avatarSize="xxxl" skeleton />
-          </header>
-          <main>
-            <div class="note">
-              <p>███████ ████ ████</p>
-              <p>████ ████████ ██████ █████████ ████ ██</p>
-            </div>
-            <div class="account-metadata-box">
-              <div class="profile-metadata">
-                <div class="profile-field">
-                  <b class="more-insignificant">███</b>
-                  <p>██████</p>
-                </div>
-                <div class="profile-field">
-                  <b class="more-insignificant">████</b>
-                  <p>███████████</p>
-                </div>
-              </div>
-              <div class="stats">
-                <div>
-                  <span>██</span> Followers
-                </div>
-                <div>
-                  <span>██</span> Following
-                </div>
-                <div>
-                  <span>██</span> Posts
-                </div>
-              </div>
-            </div>
-            <div class="actions">
-              <span />
-              <span class="buttons">
-                <button type="button" title="More" class="plain" disabled>
-                  <Icon icon="more" size="l" alt="More" />
-                </button>
-              </span>
-            </div>
-          </main>
-        </>
-      ) : (
-        info && (
-          <>
-            {!!moved && (
-              <div class="account-moved">
-                <p>
-                  <b>{displayName}</b> has indicated that their new account is
-                  now:
-                </p>
-                <AccountBlock
-                  account={moved}
-                  instance={instance}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    states.showAccount = moved;
-                  }}
-                />
-              </div>
+    <>
+      <div
+        tabIndex="-1"
+        class={`account-container ${uiState === 'loading' ? 'skeleton' : ''}`}
+        style={{
+          '--header-color-1': headerCornerColors[0],
+          '--header-color-2': headerCornerColors[1],
+          '--header-color-3': headerCornerColors[2],
+          '--header-color-4': headerCornerColors[3],
+        }}
+      >
+        {uiState === 'error' && (
+          <div class="ui-state">
+            <p>
+              <Trans>Unable to load account.</Trans>
+            </p>
+            {isString ? (
+              <p>
+                {isStringURL ? (
+                  <a href={account} target="_blank" rel="noopener">
+                    {account}
+                  </a>
+                ) : (
+                  <code class="insignificant">{account}</code>
+                )}
+              </p>
+            ) : (
+              <p>
+                <a href={url} target="_blank" rel="noopener">
+                  <Trans>Go to account page</Trans> <Icon icon="external" />
+                </a>
+              </p>
             )}
-            {!!header && !/missing\.png$/.test(header) && (
-              <img
-                src={header}
-                alt=""
-                class={`header-banner ${
-                  headerIsAvatar ? 'header-is-avatar' : ''
-                }`}
-                onError={(e) => {
-                  if (e.target.crossOrigin) {
-                    if (e.target.src !== headerStatic) {
+          </div>
+        )}
+        {uiState === 'loading' ? (
+          <>
+            <header>
+              <AccountBlock avatarSize="xxxl" skeleton />
+            </header>
+            <main>
+              <div class="note">
+                <p>███████ ████ ████</p>
+                <p>████ ████████ ██████ █████████ ████ ██</p>
+              </div>
+              <div class="account-metadata-box">
+                <div class="profile-metadata">
+                  <div class="profile-field">
+                    <b class="more-insignificant">███</b>
+                    <p>██████</p>
+                  </div>
+                  <div class="profile-field">
+                    <b class="more-insignificant">████</b>
+                    <p>███████████</p>
+                  </div>
+                </div>
+                <div class="stats">
+                  <div>
+                    <span>██</span> <Trans>Followers</Trans>
+                  </div>
+                  <div>
+                    <span>██</span>{' '}
+                    <Trans id="following.stats">Following</Trans>
+                  </div>
+                  <div>
+                    <span>██</span> <Trans>Posts</Trans>
+                  </div>
+                </div>
+              </div>
+              <div class="actions">
+                <span />
+                <span class="buttons">
+                  <button type="button" class="plain" disabled>
+                    <Icon icon="more" size="l" alt={t`More`} />
+                  </button>
+                </span>
+              </div>
+            </main>
+          </>
+        ) : (
+          info && (
+            <>
+              {!!moved && (
+                <div class="account-moved">
+                  <p>
+                    <Trans>
+                      <b>{displayName}</b> has indicated that their new account
+                      is now:
+                    </Trans>
+                  </p>
+                  <AccountBlock
+                    account={moved}
+                    instance={instance}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      states.showAccount = moved;
+                    }}
+                  />
+                </div>
+              )}
+              {!!header && !/missing\.png$/.test(header) && (
+                <img
+                  src={header}
+                  alt=""
+                  class={`header-banner ${
+                    headerIsAvatar ? 'header-is-avatar' : ''
+                  }`}
+                  onError={(e) => {
+                    if (e.target.crossOrigin) {
+                      if (e.target.src !== headerStatic) {
+                        e.target.src = headerStatic;
+                      } else {
+                        e.target.removeAttribute('crossorigin');
+                        e.target.src = header;
+                      }
+                    } else if (e.target.src !== headerStatic) {
                       e.target.src = headerStatic;
                     } else {
-                      e.target.removeAttribute('crossorigin');
-                      e.target.src = header;
+                      e.target.remove();
                     }
-                  } else if (e.target.src !== headerStatic) {
-                    e.target.src = headerStatic;
-                  } else {
-                    e.target.remove();
-                  }
-                }}
-                crossOrigin="anonymous"
-                onLoad={(e) => {
-                  e.target.classList.add('loaded');
-                  try {
-                    // Get color from four corners of image
-                    const canvas = window.OffscreenCanvas
-                      ? new OffscreenCanvas(1, 1)
-                      : document.createElement('canvas');
-                    const ctx = canvas.getContext('2d', {
-                      willReadFrequently: true,
-                    });
-                    canvas.width = e.target.width;
-                    canvas.height = e.target.height;
-                    ctx.imageSmoothingEnabled = false;
-                    ctx.drawImage(e.target, 0, 0);
-                    // const colors = [
-                    //   ctx.getImageData(0, 0, 1, 1).data,
-                    //   ctx.getImageData(e.target.width - 1, 0, 1, 1).data,
-                    //   ctx.getImageData(0, e.target.height - 1, 1, 1).data,
-                    //   ctx.getImageData(
-                    //     e.target.width - 1,
-                    //     e.target.height - 1,
-                    //     1,
-                    //     1,
-                    //   ).data,
-                    // ];
-                    // Get 10x10 pixels from corners, get average color from each
-                    const pixelDimension = 10;
-                    const colors = [
-                      ctx.getImageData(0, 0, pixelDimension, pixelDimension)
-                        .data,
-                      ctx.getImageData(
-                        e.target.width - pixelDimension,
-                        0,
-                        pixelDimension,
-                        pixelDimension,
-                      ).data,
-                      ctx.getImageData(
-                        0,
-                        e.target.height - pixelDimension,
-                        pixelDimension,
-                        pixelDimension,
-                      ).data,
-                      ctx.getImageData(
-                        e.target.width - pixelDimension,
-                        e.target.height - pixelDimension,
-                        pixelDimension,
-                        pixelDimension,
-                      ).data,
-                    ].map((data) => {
-                      let r = 0;
-                      let g = 0;
-                      let b = 0;
-                      let a = 0;
-                      for (let i = 0; i < data.length; i += 4) {
-                        r += data[i];
-                        g += data[i + 1];
-                        b += data[i + 2];
-                        a += data[i + 3];
-                      }
-                      const dataLength = data.length / 4;
-                      return [
-                        r / dataLength,
-                        g / dataLength,
-                        b / dataLength,
-                        a / dataLength,
-                      ];
-                    });
-                    const rgbColors = colors.map((color) => {
-                      const [r, g, b, a] = lightenRGB(color);
-                      return `rgba(${r}, ${g}, ${b}, ${a})`;
-                    });
-                    setHeaderCornerColors(rgbColors);
-                    console.log({ colors, rgbColors });
-                  } catch (e) {
-                    // Silently fail
-                  }
-                }}
-              />
-            )}
-            <header>
-              {standalone ? (
-                <Menu2
-                  shift={
-                    window.matchMedia('(min-width: calc(40em))').matches
-                      ? 114
-                      : 64
-                  }
-                  menuButton={
-                    <div>
-                      <AccountBlock
-                        account={info}
-                        instance={instance}
-                        avatarSize="xxxl"
-                        onClick={() => {}}
-                      />
-                    </div>
-                  }
-                >
-                  <div class="szh-menu__header">
-                    <AccountHandleInfo acct={acct} instance={instance} />
-                  </div>
-                  <MenuItem
-                    onClick={() => {
-                      const handleWithInstance = acct.includes('@')
-                        ? `@${acct}`
-                        : `@${acct}@${instance}`;
-                      try {
-                        navigator.clipboard.writeText(handleWithInstance);
-                        showToast('Handle copied');
-                      } catch (e) {
-                        console.error(e);
-                        showToast('Unable to copy handle');
-                      }
-                    }}
-                  >
-                    <Icon icon="link" />
-                    <span>Copy handle</span>
-                  </MenuItem>
-                  <MenuItem href={url} target="_blank">
-                    <Icon icon="external" />
-                    <span>Go to original profile page</span>
-                  </MenuItem>
-                  <MenuDivider />
-                  <MenuLink href={info.avatar} target="_blank">
-                    <Icon icon="user" />
-                    <span>View profile image</span>
-                  </MenuLink>
-                  <MenuLink href={info.header} target="_blank">
-                    <Icon icon="media" />
-                    <span>View profile header</span>
-                  </MenuLink>
-                </Menu2>
-              ) : (
-                <AccountBlock
-                  account={info}
-                  instance={instance}
-                  avatarSize="xxxl"
-                  internal
+                  }}
+                  crossOrigin="anonymous"
+                  onLoad={(e) => {
+                    e.target.classList.add('loaded');
+                    try {
+                      // Get color from four corners of image
+                      const canvas = window.OffscreenCanvas
+                        ? new OffscreenCanvas(1, 1)
+                        : document.createElement('canvas');
+                      const ctx = canvas.getContext('2d', {
+                        willReadFrequently: true,
+                      });
+                      canvas.width = e.target.width;
+                      canvas.height = e.target.height;
+                      ctx.imageSmoothingEnabled = false;
+                      ctx.drawImage(e.target, 0, 0);
+                      // const colors = [
+                      //   ctx.getImageData(0, 0, 1, 1).data,
+                      //   ctx.getImageData(e.target.width - 1, 0, 1, 1).data,
+                      //   ctx.getImageData(0, e.target.height - 1, 1, 1).data,
+                      //   ctx.getImageData(
+                      //     e.target.width - 1,
+                      //     e.target.height - 1,
+                      //     1,
+                      //     1,
+                      //   ).data,
+                      // ];
+                      // Get 10x10 pixels from corners, get average color from each
+                      const pixelDimension = 10;
+                      const colors = [
+                        ctx.getImageData(0, 0, pixelDimension, pixelDimension)
+                          .data,
+                        ctx.getImageData(
+                          e.target.width - pixelDimension,
+                          0,
+                          pixelDimension,
+                          pixelDimension,
+                        ).data,
+                        ctx.getImageData(
+                          0,
+                          e.target.height - pixelDimension,
+                          pixelDimension,
+                          pixelDimension,
+                        ).data,
+                        ctx.getImageData(
+                          e.target.width - pixelDimension,
+                          e.target.height - pixelDimension,
+                          pixelDimension,
+                          pixelDimension,
+                        ).data,
+                      ].map((data) => {
+                        let r = 0;
+                        let g = 0;
+                        let b = 0;
+                        let a = 0;
+                        for (let i = 0; i < data.length; i += 4) {
+                          r += data[i];
+                          g += data[i + 1];
+                          b += data[i + 2];
+                          a += data[i + 3];
+                        }
+                        const dataLength = data.length / 4;
+                        return [
+                          r / dataLength,
+                          g / dataLength,
+                          b / dataLength,
+                          a / dataLength,
+                        ];
+                      });
+                      const rgbColors = colors.map((color) => {
+                        const [r, g, b, a] = lightenRGB(color);
+                        return `rgba(${r}, ${g}, ${b}, ${a})`;
+                      });
+                      setHeaderCornerColors(rgbColors);
+                      console.log({ colors, rgbColors });
+                    } catch (e) {
+                      // Silently fail
+                    }
+                  }}
                 />
               )}
-            </header>
-            <div class="faux-header-bg" aria-hidden="true" />
-            <main>
-              {!!memorial && <span class="tag">In Memoriam</span>}
-              {!!bot && (
-                <span class="tag">
-                  <Icon icon="bot" /> Automated
-                </span>
-              )}
-              {!!group && (
-                <span class="tag">
-                  <Icon icon="group" /> Group
-                </span>
-              )}
-              {roles?.map((role) => (
-                <span class="tag">
-                  {role.name}
-                  {!!accountInstance && (
-                    <>
-                      {' '}
-                      <span class="more-insignificant">{accountInstance}</span>
-                    </>
-                  )}
-                </span>
-              ))}
-              <div
-                class="note"
-                dir="auto"
-                onClick={handleContentLinks({
-                  instance: currentInstance,
-                })}
-                dangerouslySetInnerHTML={{
-                  __html: enhanceContent(note, { emojis }),
-                }}
-              />
-              <div class="account-metadata-box">
-                {fields?.length > 0 && (
-                  <div class="profile-metadata">
-                    {fields.map(({ name, value, verifiedAt }, i) => (
-                      <div
-                        class={`profile-field ${
-                          verifiedAt ? 'profile-verified' : ''
-                        }`}
-                        key={name + i}
-                        dir="auto"
-                      >
-                        <b>
-                          <EmojiText text={name} emojis={emojis} />{' '}
-                          {!!verifiedAt && (
-                            <Icon icon="check-circle" size="s" />
-                          )}
-                        </b>
-                        <p
-                          dangerouslySetInnerHTML={{
-                            __html: enhanceContent(value, { emojis }),
-                          }}
+              <header>
+                {standalone ? (
+                  <Menu2
+                    shift={
+                      window.matchMedia('(min-width: calc(40em))').matches
+                        ? 114
+                        : 64
+                    }
+                    menuButton={
+                      <div>
+                        <AccountBlock
+                          account={info}
+                          instance={instance}
+                          avatarSize="xxxl"
+                          onClick={() => {}}
                         />
                       </div>
-                    ))}
-                  </div>
-                )}
-                <div class="stats">
-                  <LinkOrDiv
-                    tabIndex={0}
-                    to={accountLink}
-                    onClick={() => {
-                      // states.showAccount = false;
-                      setTimeout(() => {
-                        states.showGenericAccounts = {
-                          id: 'followers',
-                          heading: 'Followers',
-                          fetchAccounts: fetchFollowers,
-                          instance,
-                          excludeRelationshipAttrs: isSelf
-                            ? ['followedBy']
-                            : [],
-                          blankCopy: hideCollections
-                            ? 'This user has chosen to not make this information available.'
-                            : undefined,
-                        };
-                      }, 0);
-                    }}
+                    }
                   >
-                    {!!familiarFollowers.length && (
-                      <span class="shazam-container-horizontal">
-                        <span class="shazam-container-inner stats-avatars-bunch">
-                          {familiarFollowers.map((follower) => (
-                            <Avatar
-                              url={follower.avatarStatic}
-                              size="s"
-                              alt={`${follower.displayName} @${follower.acct}`}
-                              squircle={follower?.bot}
-                            />
-                          ))}
-                        </span>
+                    <div class="szh-menu__header">
+                      <AccountHandleInfo acct={acct} instance={instance} />
+                    </div>
+                    <MenuItem
+                      onClick={() => {
+                        const handleWithInstance = acct.includes('@')
+                          ? `@${acct}`
+                          : `@${acct}@${instance}`;
+                        try {
+                          navigator.clipboard.writeText(handleWithInstance);
+                          showToast(t`Handle copied`);
+                        } catch (e) {
+                          console.error(e);
+                          showToast(t`Unable to copy handle`);
+                        }
+                      }}
+                    >
+                      <Icon icon="link" />
+                      <span>
+                        <Trans>Copy handle</Trans>
                       </span>
-                    )}
-                    <span title={followersCount}>
-                      {shortenNumber(followersCount)}
-                    </span>{' '}
-                    Followers
-                  </LinkOrDiv>
-                  <LinkOrDiv
-                    class="insignificant"
-                    tabIndex={0}
-                    to={accountLink}
-                    onClick={() => {
-                      // states.showAccount = false;
-                      setTimeout(() => {
-                        states.showGenericAccounts = {
-                          heading: 'Following',
-                          fetchAccounts: fetchFollowing,
-                          instance,
-                          excludeRelationshipAttrs: isSelf ? ['following'] : [],
-                          blankCopy: hideCollections
-                            ? 'This user has chosen to not make this information available.'
-                            : undefined,
+                    </MenuItem>
+                    <MenuItem href={url} target="_blank">
+                      <Icon icon="external" />
+                      <span>
+                        <Trans>Go to original profile page</Trans>
+                      </span>
+                    </MenuItem>
+                    <MenuDivider />
+                    <MenuItem
+                      onClick={() => {
+                        states.showMediaModal = {
+                          mediaAttachments: [
+                            {
+                              type: 'image',
+                              url: avatarStatic,
+                            },
+                          ],
                         };
-                      }, 0);
-                    }}
-                  >
-                    <span title={followingCount}>
-                      {shortenNumber(followingCount)}
-                    </span>{' '}
-                    Following
-                    <br />
-                  </LinkOrDiv>
-                  <LinkOrDiv
-                    class="insignificant"
-                    to={accountLink}
-                    // onClick={
-                    //   standalone
-                    //     ? undefined
-                    //     : () => {
-                    //         hideAllModals();
-                    //       }
-                    // }
-                  >
-                    <span title={statusesCount}>
-                      {shortenNumber(statusesCount)}
-                    </span>{' '}
-                    Posts
-                  </LinkOrDiv>
-                  {!!createdAt && (
-                    <div class="insignificant">
-                      Joined{' '}
-                      <time datetime={createdAt}>
-                        {niceDateTime(createdAt, {
-                          hideTime: true,
-                        })}
-                      </time>
-                    </div>
-                  )}
-                </div>
-              </div>
-              {!!postingStats && (
-                <LinkOrDiv
-                  to={accountLink}
-                  class="account-metadata-box"
-                  // onClick={() => {
-                  //   states.showAccount = false;
-                  // }}
-                >
-                  <div class="shazam-container">
-                    <div class="shazam-container-inner">
-                      {hasPostingStats ? (
-                        <div
-                          class="posting-stats"
-                          title={`${Math.round(
-                            (postingStats.originals / postingStats.total) * 100,
-                          )}% original posts, ${Math.round(
-                            (postingStats.replies / postingStats.total) * 100,
-                          )}% replies, ${Math.round(
-                            (postingStats.boosts / postingStats.total) * 100,
-                          )}% boosts`}
-                        >
-                          <div>
-                            {postingStats.daysSinceLastPost < 365
-                              ? `Last ${postingStats.total} post${
-                                  postingStats.total > 1 ? 's' : ''
-                                } in the past 
-                      ${postingStats.daysSinceLastPost} day${
-                                  postingStats.daysSinceLastPost > 1 ? 's' : ''
-                                }`
-                              : `
-                      Last ${postingStats.total} posts in the past year(s)
-                      `}
-                          </div>
-                          <div
-                            class="posting-stats-bar"
-                            style={{
-                              // [originals | replies | boosts]
-                              '--originals-percentage': `${
-                                (postingStats.originals / postingStats.total) *
-                                100
-                              }%`,
-                              '--replies-percentage': `${
-                                ((postingStats.originals +
-                                  postingStats.replies) /
-                                  postingStats.total) *
-                                100
-                              }%`,
-                            }}
-                          />
-                          <div class="posting-stats-legends">
-                            <span class="ib">
-                              <span class="posting-stats-legend-item posting-stats-legend-item-originals" />{' '}
-                              Original
-                            </span>{' '}
-                            <span class="ib">
-                              <span class="posting-stats-legend-item posting-stats-legend-item-replies" />{' '}
-                              Replies
-                            </span>{' '}
-                            <span class="ib">
-                              <span class="posting-stats-legend-item posting-stats-legend-item-boosts" />{' '}
-                              Boosts
-                            </span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div class="posting-stats">Post stats unavailable.</div>
-                      )}
-                    </div>
-                  </div>
-                </LinkOrDiv>
-              )}
-              {!moved && (
-                <div class="account-metadata-box">
-                  <div
-                    class="shazam-container no-animation"
-                    hidden={!!postingStats}
-                  >
-                    <div class="shazam-container-inner">
-                      <button
-                        type="button"
-                        class="posting-stats-button"
-                        disabled={postingStatsUIState === 'loading'}
+                      }}
+                    >
+                      <Icon icon="user" />
+                      <span>
+                        <Trans>View profile image</Trans>
+                      </span>
+                    </MenuItem>
+                    {!!headerStatic && !headerIsAvatar && (
+                      <MenuItem
                         onClick={() => {
-                          renderPostingStats();
+                          states.showMediaModal = {
+                            mediaAttachments: [
+                              {
+                                type: 'image',
+                                url: headerStatic,
+                              },
+                            ],
+                          };
                         }}
                       >
+                        <Icon icon="media" />
+                        <span>
+                          <Trans>View profile header</Trans>
+                        </span>
+                      </MenuItem>
+                    )}
+                    {currentAuthenticated &&
+                      isSelf &&
+                      supports('@mastodon/profile-edit') && (
+                        <>
+                          <MenuDivider />
+                          <MenuItem
+                            onClick={() => {
+                              setShowEditProfile(true);
+                            }}
+                          >
+                            <Icon icon="pencil" />
+                            <span>
+                              <Trans>Edit profile</Trans>
+                            </span>
+                          </MenuItem>
+                        </>
+                      )}
+                  </Menu2>
+                ) : (
+                  <AccountBlock
+                    account={info}
+                    instance={instance}
+                    avatarSize="xxxl"
+                    internal
+                  />
+                )}
+              </header>
+              <div class="faux-header-bg" aria-hidden="true" />
+              <main>
+                {!!memorial && (
+                  <span class="tag">
+                    <Trans>In Memoriam</Trans>
+                  </span>
+                )}
+                {!!bot && (
+                  <span class="tag">
+                    <Icon icon="bot" /> <Trans>Automated</Trans>
+                  </span>
+                )}
+                {!!group && (
+                  <span class="tag">
+                    <Icon icon="group" /> <Trans>Group</Trans>
+                  </span>
+                )}
+                {roles?.map((role) => (
+                  <span class="tag">
+                    {role.name}
+                    {!!accountInstance && (
+                      <>
+                        {' '}
+                        <span class="more-insignificant">
+                          {accountInstance}
+                        </span>
+                      </>
+                    )}
+                  </span>
+                ))}
+                <div
+                  class="note"
+                  dir="auto"
+                  onClick={handleContentLinks({
+                    instance: currentInstance,
+                  })}
+                  dangerouslySetInnerHTML={{
+                    __html: enhanceContent(note, { emojis }),
+                  }}
+                />
+                <div class="account-metadata-box">
+                  {fields?.length > 0 && (
+                    <div class="profile-metadata">
+                      {fields.map(({ name, value, verifiedAt }, i) => (
                         <div
-                          class={`posting-stats-bar posting-stats-icon ${
-                            postingStatsUIState === 'loading' ? 'loading' : ''
+                          class={`profile-field ${
+                            verifiedAt ? 'profile-verified' : ''
                           }`}
-                          style={{
-                            '--originals-percentage': '33%',
-                            '--replies-percentage': '66%',
+                          key={name + i}
+                          dir="auto"
+                        >
+                          <b>
+                            <EmojiText text={name} emojis={emojis} />{' '}
+                            {!!verifiedAt && (
+                              <Icon
+                                icon="check-circle"
+                                size="s"
+                                alt={t`Verified`}
+                              />
+                            )}
+                          </b>
+                          <p
+                            dangerouslySetInnerHTML={{
+                              __html: enhanceContent(value, { emojis }),
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div class="stats">
+                    <LinkOrDiv
+                      tabIndex={0}
+                      to={accountLink}
+                      onClick={() => {
+                        // states.showAccount = false;
+                        setTimeout(() => {
+                          states.showGenericAccounts = {
+                            id: 'followers',
+                            heading: t`Followers`,
+                            fetchAccounts: fetchFollowers,
+                            instance,
+                            excludeRelationshipAttrs: isSelf
+                              ? ['followedBy']
+                              : [],
+                            blankCopy: hideCollections
+                              ? t`This user has chosen to not make this information available.`
+                              : undefined,
+                          };
+                        }, 0);
+                      }}
+                    >
+                      {!!familiarFollowers.length && (
+                        <span class="shazam-container-horizontal">
+                          <span class="shazam-container-inner stats-avatars-bunch">
+                            {familiarFollowers.map((follower) => (
+                              <Avatar
+                                url={follower.avatarStatic}
+                                size="s"
+                                alt={`${follower.displayName} @${follower.acct}`}
+                                squircle={follower?.bot}
+                              />
+                            ))}
+                          </span>
+                        </span>
+                      )}
+                      <Plural
+                        value={followersCount}
+                        one={
+                          <Trans>
+                            <span title={followersCount}>
+                              {shortenNumber(followersCount)}
+                            </span>{' '}
+                            Follower
+                          </Trans>
+                        }
+                        other={
+                          <Trans>
+                            <span title={followersCount}>
+                              {shortenNumber(followersCount)}
+                            </span>{' '}
+                            Followers
+                          </Trans>
+                        }
+                      />
+                    </LinkOrDiv>
+                    <LinkOrDiv
+                      class="insignificant"
+                      tabIndex={0}
+                      to={accountLink}
+                      onClick={() => {
+                        // states.showAccount = false;
+                        setTimeout(() => {
+                          states.showGenericAccounts = {
+                            heading: t({
+                              id: 'following.stats',
+                              message: 'Following',
+                            }),
+                            fetchAccounts: fetchFollowing,
+                            instance,
+                            excludeRelationshipAttrs: isSelf
+                              ? ['following']
+                              : [],
+                            blankCopy: hideCollections
+                              ? t`This user has chosen to not make this information available.`
+                              : undefined,
+                          };
+                        }, 0);
+                      }}
+                    >
+                      <Plural
+                        value={followingCount}
+                        other={
+                          <Trans>
+                            <span title={followingCount}>
+                              {shortenNumber(followingCount)}
+                            </span>{' '}
+                            Following
+                          </Trans>
+                        }
+                      />
+                      <br />
+                    </LinkOrDiv>
+                    <LinkOrDiv
+                      class="insignificant"
+                      to={accountLink}
+                      // onClick={
+                      //   standalone
+                      //     ? undefined
+                      //     : () => {
+                      //         hideAllModals();
+                      //       }
+                      // }
+                    >
+                      <Plural
+                        value={statusesCount}
+                        one={
+                          <Trans>
+                            <span title={statusesCount}>
+                              {shortenNumber(statusesCount)}
+                            </span>{' '}
+                            Post
+                          </Trans>
+                        }
+                        other={
+                          <Trans>
+                            <span title={statusesCount}>
+                              {shortenNumber(statusesCount)}
+                            </span>{' '}
+                            Posts
+                          </Trans>
+                        }
+                      />
+                    </LinkOrDiv>
+                    {!!createdAt && (
+                      <div class="insignificant">
+                        <Trans>
+                          Joined{' '}
+                          <time datetime={createdAt}>
+                            {niceDateTime(createdAt, {
+                              hideTime: true,
+                            })}
+                          </time>
+                        </Trans>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {!!postingStats && (
+                  <LinkOrDiv
+                    to={accountLink}
+                    class="account-metadata-box"
+                    // onClick={() => {
+                    //   states.showAccount = false;
+                    // }}
+                  >
+                    <div class="shazam-container">
+                      <div class="shazam-container-inner">
+                        {hasPostingStats ? (
+                          <div
+                            class="posting-stats"
+                            title={t`${(
+                              postingStats.originals / postingStats.total
+                            ).toLocaleString(i18n.locale || undefined, {
+                              style: 'percent',
+                            })} original posts, ${(
+                              postingStats.replies / postingStats.total
+                            ).toLocaleString(i18n.locale || undefined, {
+                              style: 'percent',
+                            })} replies, ${(
+                              postingStats.boosts / postingStats.total
+                            ).toLocaleString(i18n.locale || undefined, {
+                              style: 'percent',
+                            })} boosts`}
+                          >
+                            <div>
+                              {postingStats.daysSinceLastPost < 365
+                                ? plural(postingStats.total, {
+                                    one: plural(
+                                      postingStats.daysSinceLastPost,
+                                      {
+                                        one: `Last 1 post in the past 1 day`,
+                                        other: `Last 1 post in the past ${postingStats.daysSinceLastPost} days`,
+                                      },
+                                    ),
+                                    other: plural(
+                                      postingStats.daysSinceLastPost,
+                                      {
+                                        one: `Last ${postingStats.total} posts in the past 1 day`,
+                                        other: `Last ${postingStats.total} posts in the past ${postingStats.daysSinceLastPost} days`,
+                                      },
+                                    ),
+                                  })
+                                : plural(postingStats.total, {
+                                    one: 'Last 1 post in the past year(s)',
+                                    other: `Last ${postingStats.total} posts in the past year(s)`,
+                                  })}
+                            </div>
+                            <div
+                              class="posting-stats-bar"
+                              style={{
+                                // [originals | replies | boosts]
+                                '--originals-percentage': `${
+                                  (postingStats.originals /
+                                    postingStats.total) *
+                                  100
+                                }%`,
+                                '--replies-percentage': `${
+                                  ((postingStats.originals +
+                                    postingStats.replies) /
+                                    postingStats.total) *
+                                  100
+                                }%`,
+                              }}
+                            />
+                            <div class="posting-stats-legends">
+                              <span class="ib">
+                                <span class="posting-stats-legend-item posting-stats-legend-item-originals" />{' '}
+                                <Trans>Original</Trans>
+                              </span>{' '}
+                              <span class="ib">
+                                <span class="posting-stats-legend-item posting-stats-legend-item-replies" />{' '}
+                                <Trans>Replies</Trans>
+                              </span>{' '}
+                              <span class="ib">
+                                <span class="posting-stats-legend-item posting-stats-legend-item-boosts" />{' '}
+                                <Trans>Boosts</Trans>
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div class="posting-stats">
+                            <Trans>Post stats unavailable.</Trans>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </LinkOrDiv>
+                )}
+                {!moved && (
+                  <div class="account-metadata-box">
+                    <div
+                      class="shazam-container no-animation"
+                      hidden={!!postingStats}
+                    >
+                      <div class="shazam-container-inner">
+                        <button
+                          type="button"
+                          class="posting-stats-button"
+                          disabled={postingStatsUIState === 'loading'}
+                          onClick={() => {
+                            renderPostingStats();
                           }}
-                        />
-                        View post stats{' '}
-                        {/* <Loader
+                        >
+                          <div
+                            class={`posting-stats-bar posting-stats-icon ${
+                              postingStatsUIState === 'loading' ? 'loading' : ''
+                            }`}
+                            style={{
+                              '--originals-percentage': '33%',
+                              '--replies-percentage': '66%',
+                            }}
+                          />
+                          <Trans>View post stats</Trans>{' '}
+                          {/* <Loader
                         abrupt
                         hidden={postingStatsUIState !== 'loading'}
                       /> */}
-                      </button>
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </main>
-            <footer>
-              <RelatedActions
+                )}
+              </main>
+              <footer>
+                <RelatedActions
+                  info={info}
+                  instance={instance}
+                  standalone={standalone}
+                  authenticated={authenticated}
+                  onRelationshipChange={onRelationshipChange}
+                  onProfileUpdate={onProfileUpdate}
+                  setShowEditProfile={setShowEditProfile}
+                  showEndorsements={showEndorsements}
+                  renderEndorsements={renderEndorsements}
+                  setRenderEndorsements={setRenderEndorsements}
+                />
+              </footer>
+              <Endorsements
+                accountID={id}
                 info={info}
-                instance={instance}
-                standalone={standalone}
-                authenticated={authenticated}
-                onRelationshipChange={onRelationshipChange}
-                onProfileUpdate={onProfileUpdate}
+                open={renderEndorsements}
+                onlyOpenIfHasEndorsements={
+                  renderEndorsements === 'onlyOpenIfHasEndorsements'
+                }
               />
-            </footer>
-          </>
-        )
+            </>
+          )
+        )}
+      </div>
+      {!!showEditProfile && (
+        <Modal
+          onClose={() => {
+            setShowEditProfile(false);
+          }}
+        >
+          <EditProfileSheet
+            onClose={({ state, account } = {}) => {
+              setShowEditProfile(false);
+              if (state === 'success' && account) {
+                onProfileUpdate(account);
+              }
+            }}
+          />
+        </Modal>
       )}
-    </div>
+    </>
   );
 }
 
@@ -892,8 +1082,13 @@ function RelatedActions({
   authenticated,
   onRelationshipChange = () => {},
   onProfileUpdate = () => {},
+  setShowEditProfile = () => {},
+  showEndorsements = false,
+  renderEndorsements = false,
+  setRenderEndorsements = () => {},
 }) {
   if (!info) return null;
+  const { _, t } = useLingui();
   const {
     masto: currentMasto,
     instance: currentInstance,
@@ -928,6 +1123,8 @@ function RelatedActions({
 
   const acctWithInstance = acct.includes('@') ? acct : `${acct}@${instance}`;
 
+  const supportsEndorsements = supports('@mastodon/endorsements');
+
   useEffect(() => {
     if (info) {
       const currentAccount = getCurrentAccountID();
@@ -939,7 +1136,7 @@ function RelatedActions({
           // Grab this account from my logged-in instance
           const acctHasInstance = info.acct.includes('@');
           try {
-            const results = await currentMasto.v2.search.fetch({
+            const results = await currentMasto.v2.search.list({
               q: acctHasInstance ? info.acct : `${info.username}@${instance}`,
               type: 'accounts',
               limit: 1,
@@ -1004,7 +1201,6 @@ function RelatedActions({
   const [showTranslatedBio, setShowTranslatedBio] = useState(false);
   const [showAddRemoveLists, setShowAddRemoveLists] = useState(false);
   const [showPrivateNoteModal, setShowPrivateNoteModal] = useState(false);
-  const [showEditProfile, setShowEditProfile] = useState(false);
   const [lists, setLists] = useState([]);
 
   return (
@@ -1012,28 +1208,40 @@ function RelatedActions({
       <div class="actions">
         <span>
           {followedBy ? (
-            <span class="tag">Follows you</span>
+            <span class="tag">
+              <Trans>Follows you</Trans>
+            </span>
           ) : !!lastStatusAt ? (
             <small class="insignificant">
-              Last post:{' '}
-              <span class="ib">
-                {niceDateTime(lastStatusAt, {
-                  hideTime: true,
-                })}
-              </span>
+              <Trans>
+                Last post:{' '}
+                <span class="ib">
+                  {niceDateTime(lastStatusAt, {
+                    hideTime: true,
+                  })}
+                </span>
+              </Trans>
             </small>
           ) : (
             <span />
           )}
-          {muting && <span class="tag danger">Muted</span>}
-          {blocking && <span class="tag danger">Blocked</span>}
+          {muting && (
+            <span class="tag danger">
+              <Trans>Muted</Trans>
+            </span>
+          )}
+          {blocking && (
+            <span class="tag danger">
+              <Trans>Blocked</Trans>
+            </span>
+          )}
         </span>{' '}
         <span class="buttons">
           {!!privateNote && (
             <button
               type="button"
               class="private-note-tag"
-              title="Private note"
+              title={t`Private note`}
               onClick={() => {
                 setShowPrivateNoteModal(true);
               }}
@@ -1056,13 +1264,8 @@ function RelatedActions({
             position="anchor"
             overflow="auto"
             menuButton={
-              <button
-                type="button"
-                title="More"
-                class="plain"
-                disabled={loading}
-              >
-                <Icon icon="more" size="l" alt="More" />
+              <button type="button" class="plain" disabled={loading}>
+                <Icon icon="more" size="l" alt={t`More`} />
               </button>
             }
             onMenuChange={(e) => {
@@ -1082,7 +1285,7 @@ function RelatedActions({
               }
             }}
           >
-            {currentAuthenticated && !isSelf && (
+            {currentAuthenticated && !isSelf ? (
               <>
                 <MenuItem
                   onClick={() => {
@@ -1094,7 +1297,11 @@ function RelatedActions({
                   }}
                 >
                   <Icon icon="at" />
-                  <span>Mention @{username}</span>
+                  <span>
+                    <Trans>
+                      Mention <span class="bidi-isolate">@{username}</span>
+                    </Trans>
+                  </span>
                 </MenuItem>
                 <MenuItem
                   onClick={() => {
@@ -1102,7 +1309,9 @@ function RelatedActions({
                   }}
                 >
                   <Icon icon="translate" />
-                  <span>Translate bio</span>
+                  <span>
+                    <Trans>Translate bio</Trans>
+                  </span>
                 </MenuItem>
                 {supports('@mastodon/profile-private-note') && (
                   <MenuItem
@@ -1112,7 +1321,7 @@ function RelatedActions({
                   >
                     <Icon icon="pencil" />
                     <span>
-                      {privateNote ? 'Edit private note' : 'Add private note'}
+                      {privateNote ? t`Edit private note` : t`Add private note`}
                     </span>
                   </MenuItem>
                 )}
@@ -1132,8 +1341,8 @@ function RelatedActions({
                             setRelationshipUIState('default');
                             showToast(
                               rel.notifying
-                                ? `Notifications enabled for @${username}'s posts.`
-                                : ` Notifications disabled for @${username}'s posts.`,
+                                ? t`Notifications enabled for @${username}'s posts.`
+                                : t` Notifications disabled for @${username}'s posts.`,
                             );
                           } catch (e) {
                             alert(e);
@@ -1145,8 +1354,8 @@ function RelatedActions({
                       <Icon icon="notification" />
                       <span>
                         {notifying
-                          ? 'Disable notifications'
-                          : 'Enable notifications'}
+                          ? t`Disable notifications`
+                          : t`Enable notifications`}
                       </span>
                     </MenuItem>
                     <MenuItem
@@ -1163,8 +1372,8 @@ function RelatedActions({
                             setRelationshipUIState('default');
                             showToast(
                               rel.showingReblogs
-                                ? `Boosts from @${username} enabled.`
-                                : `Boosts from @${username} disabled.`,
+                                ? t`Boosts from @${username} enabled.`
+                                : t`Boosts from @${username} disabled.`,
                             );
                           } catch (e) {
                             alert(e);
@@ -1175,11 +1384,70 @@ function RelatedActions({
                     >
                       <Icon icon="rocket" />
                       <span>
-                        {showingReblogs ? 'Disable boosts' : 'Enable boosts'}
+                        {showingReblogs ? t`Disable boosts` : t`Enable boosts`}
                       </span>
                     </MenuItem>
                   </>
                 )}
+                {supportsEndorsements && following && (
+                  <MenuItem
+                    onClick={() => {
+                      setRelationshipUIState('loading');
+                      (async () => {
+                        try {
+                          if (endorsed) {
+                            const newRelationship =
+                              await currentMasto.v1.accounts
+                                .$select(currentInfo?.id || id)
+                                .unpin();
+                            setRelationship(newRelationship);
+                            setRelationshipUIState('default');
+                            showToast(
+                              t`@${username} is no longer featured on your profile.`,
+                            );
+                          } else {
+                            const newRelationship =
+                              await currentMasto.v1.accounts
+                                .$select(currentInfo?.id || id)
+                                .pin();
+                            setRelationship(newRelationship);
+                            setRelationshipUIState('default');
+                            showToast(
+                              t`@${username} is now featured on your profile.`,
+                            );
+                          }
+                        } catch (e) {
+                          console.error(e);
+                          setRelationshipUIState('error');
+                          if (endorsed) {
+                            showToast(
+                              t`Unable to unfeature @${username} on your profile.`,
+                            );
+                          } else {
+                            showToast(
+                              t`Unable to feature @${username} on your profile.`,
+                            );
+                          }
+                        }
+                      })();
+                    }}
+                  >
+                    <Icon icon="endorsement" />
+                    {endorsed
+                      ? t`Don't feature on profile`
+                      : t`Feature on profile`}
+                  </MenuItem>
+                )}
+                {showEndorsements &&
+                  supportsEndorsements &&
+                  !renderEndorsements && (
+                    <MenuItem onClick={() => setRenderEndorsements(true)}>
+                      <Icon icon="endorsement" />
+                      <span>
+                        <Trans>Show featured profiles</Trans>
+                      </span>
+                    </MenuItem>
+                  )}
                 {/* Add/remove from lists is only possible if following the account */}
                 {following && (
                   <MenuItem
@@ -1191,7 +1459,7 @@ function RelatedActions({
                     {lists.length ? (
                       <>
                         <small class="menu-grow">
-                          Add/Remove from Lists
+                          <Trans>Add/Remove from Lists</Trans>
                           <br />
                           <span class="more-insignificant">
                             {lists.map((list) => list.title).join(', ')}
@@ -1200,28 +1468,41 @@ function RelatedActions({
                         <small class="more-insignificant">{lists.length}</small>
                       </>
                     ) : (
-                      <span>Add/Remove from Lists</span>
+                      <span>
+                        <Trans>Add/Remove from Lists</Trans>
+                      </span>
                     )}
                   </MenuItem>
                 )}
                 <MenuDivider />
               </>
+            ) : (
+              supportsEndorsements &&
+              !renderEndorsements && (
+                <>
+                  <MenuItem onClick={() => setRenderEndorsements(true)}>
+                    <Icon icon="endorsement" />
+                    Show featured profiles
+                  </MenuItem>
+                  <MenuDivider />
+                </>
+              )
             )}
             <MenuItem
               onClick={() => {
                 const handle = `@${currentInfo?.acct || acctWithInstance}`;
                 try {
                   navigator.clipboard.writeText(handle);
-                  showToast('Handle copied');
+                  showToast(t`Handle copied`);
                 } catch (e) {
                   console.error(e);
-                  showToast('Unable to copy handle');
+                  showToast(t`Unable to copy handle`);
                 }
               }}
             >
               <Icon icon="copy" />
               <small>
-                Copy handle
+                <Trans>Copy handle</Trans>
                 <br />
                 <span class="more-insignificant bidi-isolate">
                   @{currentInfo?.acct || acctWithInstance}
@@ -1238,15 +1519,17 @@ function RelatedActions({
                   // Copy url to clipboard
                   try {
                     navigator.clipboard.writeText(url);
-                    showToast('Link copied');
+                    showToast(t`Link copied`);
                   } catch (e) {
                     console.error(e);
-                    showToast('Unable to copy link');
+                    showToast(t`Unable to copy link`);
                   }
                 }}
               >
                 <Icon icon="link" />
-                <span>Copy</span>
+                <span>
+                  <Trans>Copy</Trans>
+                </span>
               </MenuItem>
               {navigator?.share &&
                 navigator?.canShare?.({
@@ -1260,12 +1543,14 @@ function RelatedActions({
                         });
                       } catch (e) {
                         console.error(e);
-                        alert("Sharing doesn't seem to work.");
+                        alert(t`Sharing doesn't seem to work.`);
                       }
                     }}
                   >
                     <Icon icon="share" />
-                    <span>Share…</span>
+                    <span>
+                      <Trans>Share…</Trans>
+                    </span>
                   </MenuItem>
                 )}
             </div>
@@ -1284,7 +1569,7 @@ function RelatedActions({
                           console.log('unmuting', newRelationship);
                           setRelationship(newRelationship);
                           setRelationshipUIState('default');
-                          showToast(`Unmuted @${username}`);
+                          showToast(t`Unmuted @${username}`);
                           states.reloadGenericAccounts.id = 'mute';
                           states.reloadGenericAccounts.counter++;
                         } catch (e) {
@@ -1295,7 +1580,11 @@ function RelatedActions({
                     }}
                   >
                     <Icon icon="unmute" />
-                    <span>Unmute @{username}</span>
+                    <span>
+                      <Trans>
+                        Unmute <span class="bidi-isolate">@{username}</span>
+                      </Trans>
+                    </span>
                   </MenuItem>
                 ) : (
                   <SubMenu2
@@ -1307,7 +1596,11 @@ function RelatedActions({
                     label={
                       <>
                         <Icon icon="mute" />
-                        <span class="menu-grow">Mute @{username}…</span>
+                        <span class="menu-grow">
+                          <Trans>
+                            Mute <span class="bidi-isolate">@{username}</span>…
+                          </Trans>
+                        </span>
                         <span
                           style={{
                             textOverflow: 'clip',
@@ -1336,19 +1629,26 @@ function RelatedActions({
                                 setRelationship(newRelationship);
                                 setRelationshipUIState('default');
                                 showToast(
-                                  `Muted @${username} for ${MUTE_DURATIONS_LABELS[duration]}`,
+                                  t`Muted @${username} for ${
+                                    typeof MUTE_DURATIONS_LABELS[duration] ===
+                                    'function'
+                                      ? MUTE_DURATIONS_LABELS[duration]()
+                                      : _(MUTE_DURATIONS_LABELS[duration])
+                                  }`,
                                 );
                                 states.reloadGenericAccounts.id = 'mute';
                                 states.reloadGenericAccounts.counter++;
                               } catch (e) {
                                 console.error(e);
                                 setRelationshipUIState('error');
-                                showToast(`Unable to mute @${username}`);
+                                showToast(t`Unable to mute @${username}`);
                               }
                             })();
                           }}
                         >
-                          {MUTE_DURATIONS_LABELS[duration]}
+                          {typeof MUTE_DURATIONS_LABELS[duration] === 'function'
+                            ? MUTE_DURATIONS_LABELS[duration]()
+                            : _(MUTE_DURATIONS_LABELS[duration])}
                         </MenuItem>
                       ))}
                     </div>
@@ -1361,7 +1661,12 @@ function RelatedActions({
                     confirmLabel={
                       <>
                         <Icon icon="user-x" />
-                        <span>Remove @{username} from followers?</span>
+                        <span>
+                          <Trans>
+                            Remove <span class="bidi-isolate">@{username}</span>{' '}
+                            from followers?
+                          </Trans>
+                        </span>
                       </>
                     }
                     onClick={() => {
@@ -1377,7 +1682,7 @@ function RelatedActions({
                           );
                           setRelationship(newRelationship);
                           setRelationshipUIState('default');
-                          showToast(`@${username} removed from followers`);
+                          showToast(t`@${username} removed from followers`);
                           states.reloadGenericAccounts.id = 'followers';
                           states.reloadGenericAccounts.counter++;
                         } catch (e) {
@@ -1388,7 +1693,9 @@ function RelatedActions({
                     }}
                   >
                     <Icon icon="user-x" />
-                    <span>Remove follower…</span>
+                    <span>
+                      <Trans>Remove follower…</Trans>
+                    </span>
                   </MenuConfirm>
                 )}
                 <MenuConfirm
@@ -1397,9 +1704,16 @@ function RelatedActions({
                   confirmLabel={
                     <>
                       <Icon icon="block" />
-                      <span>Block @{username}?</span>
+                      <span>
+                        <Trans>
+                          Block <span class="bidi-isolate">@{username}</span>?
+                        </Trans>
+                      </span>
                     </>
                   }
+                  itemProps={{
+                    className: 'danger',
+                  }}
                   menuItemClassName="danger"
                   onClick={() => {
                     // if (!blocking && !confirm(`Block @${username}?`)) {
@@ -1415,7 +1729,7 @@ function RelatedActions({
                           console.log('unblocking', newRelationship);
                           setRelationship(newRelationship);
                           setRelationshipUIState('default');
-                          showToast(`Unblocked @${username}`);
+                          showToast(t`Unblocked @${username}`);
                         } else {
                           const newRelationship = await currentMasto.v1.accounts
                             .$select(currentInfo?.id || id)
@@ -1423,7 +1737,7 @@ function RelatedActions({
                           console.log('blocking', newRelationship);
                           setRelationship(newRelationship);
                           setRelationshipUIState('default');
-                          showToast(`Blocked @${username}`);
+                          showToast(t`Blocked @${username}`);
                         }
                         states.reloadGenericAccounts.id = 'block';
                         states.reloadGenericAccounts.counter++;
@@ -1431,9 +1745,9 @@ function RelatedActions({
                         console.error(e);
                         setRelationshipUIState('error');
                         if (blocking) {
-                          showToast(`Unable to unblock @${username}`);
+                          showToast(t`Unable to unblock @${username}`);
                         } else {
-                          showToast(`Unable to block @${username}`);
+                          showToast(t`Unable to block @${username}`);
                         }
                       }
                     })();
@@ -1442,12 +1756,20 @@ function RelatedActions({
                   {blocking ? (
                     <>
                       <Icon icon="unblock" />
-                      <span>Unblock @{username}</span>
+                      <span>
+                        <Trans>
+                          Unblock <span class="bidi-isolate">@{username}</span>
+                        </Trans>
+                      </span>
                     </>
                   ) : (
                     <>
                       <Icon icon="block" />
-                      <span>Block @{username}…</span>
+                      <span>
+                        <Trans>
+                          Block <span class="bidi-isolate">@{username}</span>…
+                        </Trans>
+                      </span>
                     </>
                   )}
                 </MenuConfirm>
@@ -1460,7 +1782,11 @@ function RelatedActions({
                   }}
                 >
                   <Icon icon="flag" />
-                  <span>Report @{username}…</span>
+                  <span>
+                    <Trans>
+                      Report <span class="bidi-isolate">@{username}</span>…
+                    </Trans>
+                  </span>
                 </MenuItem>
               </>
             )}
@@ -1476,7 +1802,9 @@ function RelatedActions({
                     }}
                   >
                     <Icon icon="pencil" />
-                    <span>Edit profile</span>
+                    <span>
+                      <Trans>Edit profile</Trans>
+                    </span>
                   </MenuItem>
                 </>
               )}
@@ -1511,8 +1839,8 @@ function RelatedActions({
               confirmLabel={
                 <span>
                   {requested
-                    ? 'Withdraw follow request?'
-                    : `Unfollow @${info.acct || info.username}?`}
+                    ? t`Withdraw follow request?`
+                    : t`Unfollow @${info.acct || info.username}?`}
                 </span>
               }
               menuItemClassName="danger"
@@ -1542,7 +1870,14 @@ function RelatedActions({
                         .follow();
                     }
 
-                    if (newRelationship) setRelationship(newRelationship);
+                    if (newRelationship) {
+                      setRelationship(newRelationship);
+
+                      // Show endorsements if start following
+                      if (newRelationship.following) {
+                        setRenderEndorsements('onlyOpenIfHasEndorsements');
+                      }
+                    }
                     setRelationshipUIState('default');
                   } catch (e) {
                     alert(e);
@@ -1559,20 +1894,31 @@ function RelatedActions({
               >
                 {following ? (
                   <>
-                    <span>Following</span>
-                    <span>Unfollow…</span>
+                    <span>
+                      <Trans>Following</Trans>
+                    </span>
+                    <span>
+                      <Trans>Unfollow…</Trans>
+                    </span>
                   </>
                 ) : requested ? (
                   <>
-                    <span>Requested</span>
-                    <span>Withdraw…</span>
+                    <span>
+                      <Trans>Requested</Trans>
+                    </span>
+                    <span>
+                      <Trans>Withdraw…</Trans>
+                    </span>
                   </>
                 ) : locked ? (
                   <>
-                    <Icon icon="lock" /> <span>Follow</span>
+                    <Icon icon="lock" />{' '}
+                    <span>
+                      <Trans>Follow</Trans>
+                    </span>
                   </>
                 ) : (
-                  'Follow'
+                  t`Follow`
                 )}
               </button>
             </MenuConfirm>
@@ -1621,22 +1967,6 @@ function RelatedActions({
           />
         </Modal>
       )}
-      {!!showEditProfile && (
-        <Modal
-          onClose={() => {
-            setShowEditProfile(false);
-          }}
-        >
-          <EditProfileSheet
-            onClose={({ state, account } = {}) => {
-              setShowEditProfile(false);
-              if (state === 'success' && account) {
-                onProfileUpdate(account);
-              }
-            }}
-          />
-        </Modal>
-      )}
     </>
   );
 }
@@ -1660,6 +1990,7 @@ function lightenRGB([r, g, b]) {
 function niceAccountURL(url) {
   if (!url) return;
   const urlObj = URL.parse(url);
+  if (!urlObj) return;
   const { host, pathname } = urlObj;
   const path = pathname.replace(/\/$/, '').replace(/^\//, '');
   return (
@@ -1672,6 +2003,7 @@ function niceAccountURL(url) {
 }
 
 function TranslatedBioSheet({ note, fields, onClose }) {
+  const { t } = useLingui();
   const fieldsText =
     fields
       ?.map(({ name, value }) => `${name}\n${getHTMLText(value)}`)
@@ -1683,11 +2015,13 @@ function TranslatedBioSheet({ note, fields, onClose }) {
     <div class="sheet">
       {!!onClose && (
         <button type="button" class="sheet-close" onClick={onClose}>
-          <Icon icon="x" />
+          <Icon icon="x" alt={t`Close`} />
         </button>
       )}
       <header>
-        <h2>Translated Bio</h2>
+        <h2>
+          <Trans>Translated Bio</Trans>
+        </h2>
       </header>
       <main>
         <p
@@ -1704,6 +2038,7 @@ function TranslatedBioSheet({ note, fields, onClose }) {
 }
 
 function AddRemoveListsSheet({ accountID, onClose }) {
+  const { t } = useLingui();
   const { masto } = api();
   const [uiState, setUIState] = useState('default');
   const [lists, setLists] = useState([]);
@@ -1735,11 +2070,13 @@ function AddRemoveListsSheet({ accountID, onClose }) {
     <div class="sheet" id="list-add-remove-container">
       {!!onClose && (
         <button type="button" class="sheet-close" onClick={onClose}>
-          <Icon icon="x" />
+          <Icon icon="x" alt={t`Close`} />
         </button>
       )}
       <header>
-        <h2>Add/Remove from Lists</h2>
+        <h2>
+          <Trans>Add/Remove from Lists</Trans>
+        </h2>
       </header>
       <main>
         {lists.length > 0 ? (
@@ -1778,14 +2115,14 @@ function AddRemoveListsSheet({ accountID, onClose }) {
                           setUIState('error');
                           alert(
                             inList
-                              ? 'Unable to remove from list.'
-                              : 'Unable to add to list.',
+                              ? t`Unable to remove from list.`
+                              : t`Unable to add to list.`,
                           );
                         }
                       })();
                     }}
                   >
-                    <Icon icon="check-circle" />
+                    <Icon icon="check-circle" alt="☑️" />
                     <span>{list.title}</span>
                   </button>
                 </li>
@@ -1797,9 +2134,13 @@ function AddRemoveListsSheet({ accountID, onClose }) {
             <Loader abrupt />
           </p>
         ) : uiState === 'error' ? (
-          <p class="ui-state">Unable to load lists.</p>
+          <p class="ui-state">
+            <Trans>Unable to load lists.</Trans>
+          </p>
         ) : (
-          <p class="ui-state">No lists.</p>
+          <p class="ui-state">
+            <Trans>No lists.</Trans>
+          </p>
         )}
         <button
           type="button"
@@ -1807,7 +2148,10 @@ function AddRemoveListsSheet({ accountID, onClose }) {
           onClick={() => setShowListAddEditModal(true)}
           disabled={uiState !== 'default'}
         >
-          <Icon icon="plus" size="l" /> <span>New list</span>
+          <Icon icon="plus" size="l" />{' '}
+          <span>
+            <Trans>New list</Trans>
+          </span>
         </button>
       </main>
       {showListAddEditModal && (
@@ -1839,6 +2183,7 @@ function PrivateNoteSheet({
   onRelationshipChange = () => {},
   onClose = () => {},
 }) {
+  const { t } = useLingui();
   const { masto } = api();
   const [uiState, setUIState] = useState('default');
   const textareaRef = useRef(null);
@@ -1859,11 +2204,18 @@ function PrivateNoteSheet({
     <div class="sheet" id="private-note-container">
       {!!onClose && (
         <button type="button" class="sheet-close" onClick={onClose}>
-          <Icon icon="x" />
+          <Icon icon="x" alt={t`Close`} />
         </button>
       )}
       <header>
-        <b>Private note about @{account?.username || account?.acct}</b>
+        <b>
+          <Trans>
+            Private note about{' '}
+            <span class="bidi-isolate">
+              @{account?.username || account?.acct}
+            </span>
+          </Trans>
+        </b>
       </header>
       <main>
         <form
@@ -1887,7 +2239,7 @@ function PrivateNoteSheet({
                 } catch (e) {
                   console.error(e);
                   setUIState('error');
-                  alert(e?.message || 'Unable to update private note.');
+                  alert(e?.message || t`Unable to update private note.`);
                 }
               })();
             }
@@ -1910,12 +2262,12 @@ function PrivateNoteSheet({
                 onClose?.();
               }}
             >
-              Cancel
+              <Trans>Cancel</Trans>
             </button>
             <span>
               <Loader abrupt hidden={uiState !== 'loading'} />
               <button disabled={uiState === 'loading'} type="submit">
-                Save &amp; close
+                <Trans>Save &amp; close</Trans>
               </button>
             </span>
           </footer>
@@ -1925,10 +2277,21 @@ function PrivateNoteSheet({
   );
 }
 
+const SUPPORTED_IMAGE_FORMATS = [
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+];
+const SUPPORTED_IMAGE_FORMATS_STR = SUPPORTED_IMAGE_FORMATS.join(',');
+
 function EditProfileSheet({ onClose = () => {} }) {
+  const { t } = useLingui();
   const { masto } = api();
   const [uiState, setUIState] = useState('loading');
   const [account, setAccount] = useState(null);
+  const [headerPreview, setHeaderPreview] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -1944,19 +2307,30 @@ function EditProfileSheet({ onClose = () => {} }) {
   }, []);
 
   console.log('EditProfileSheet', account);
-  const { displayName, source } = account || {};
+  const { displayName, source, avatar, header } = account || {};
   const { note, fields } = source || {};
   const fieldsAttributesRef = useRef(null);
+
+  const avatarMediaAttachments = [
+    ...(avatar ? [{ type: 'image', url: avatar }] : []),
+    ...(avatarPreview ? [{ type: 'image', url: avatarPreview }] : []),
+  ];
+  const headerMediaAttachments = [
+    ...(header ? [{ type: 'image', url: header }] : []),
+    ...(headerPreview ? [{ type: 'image', url: headerPreview }] : []),
+  ];
 
   return (
     <div class="sheet" id="edit-profile-container">
       {!!onClose && (
         <button type="button" class="sheet-close" onClick={onClose}>
-          <Icon icon="x" />
+          <Icon icon="x" alt={t`Close`} />
         </button>
       )}
       <header>
-        <b>Edit profile</b>
+        <b>
+          <Trans>Edit profile</Trans>
+        </b>
       </header>
       <main>
         {uiState === 'loading' ? (
@@ -1968,6 +2342,8 @@ function EditProfileSheet({ onClose = () => {} }) {
             onSubmit={(e) => {
               e.preventDefault();
               const formData = new FormData(e.target);
+              const header = formData.get('header');
+              const avatar = formData.get('avatar');
               const displayName = formData.get('display_name');
               const note = formData.get('note');
               const fieldsAttributesFields =
@@ -1995,6 +2371,8 @@ function EditProfileSheet({ onClose = () => {} }) {
               (async () => {
                 try {
                   const newAccount = await masto.v1.accounts.updateCredentials({
+                    header,
+                    avatar,
                     displayName,
                     note,
                     fieldsAttributes,
@@ -2006,14 +2384,118 @@ function EditProfileSheet({ onClose = () => {} }) {
                   });
                 } catch (e) {
                   console.error(e);
-                  alert(e?.message || 'Unable to update profile.');
+                  alert(e?.message || t`Unable to update profile.`);
                 }
               })();
             }}
           >
+            <div class="edit-profile-media-container">
+              <label>
+                <Trans>Header picture</Trans>{' '}
+                <input
+                  type="file"
+                  name="header"
+                  accept={SUPPORTED_IMAGE_FORMATS_STR}
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      const blob = URL.createObjectURL(file);
+                      setHeaderPreview(blob);
+                    }
+                  }}
+                />
+              </label>
+              <div class="edit-profile-media-field">
+                {header ? (
+                  <div
+                    class="edit-media"
+                    tabIndex="0"
+                    onClick={() => {
+                      states.showMediaModal = {
+                        mediaAttachments: headerMediaAttachments,
+                        mediaIndex: 0,
+                      };
+                    }}
+                  >
+                    <img src={header} alt="" />
+                  </div>
+                ) : (
+                  <div class="edit-media"></div>
+                )}
+                {headerPreview && (
+                  <>
+                    <Icon icon="arrow-right" />
+                    <div
+                      class="edit-media"
+                      tabIndex="0"
+                      onClick={() => {
+                        states.showMediaModal = {
+                          mediaAttachments: headerMediaAttachments,
+                          mediaIndex: 1,
+                        };
+                      }}
+                    >
+                      <img src={headerPreview} alt="" />
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+            <div class="edit-profile-media-container">
+              <label>
+                <Trans>Profile picture</Trans>{' '}
+                <input
+                  type="file"
+                  name="avatar"
+                  accept={SUPPORTED_IMAGE_FORMATS_STR}
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      const blob = URL.createObjectURL(file);
+                      setAvatarPreview(blob);
+                    }
+                  }}
+                />
+              </label>
+              <div class="edit-profile-media-field">
+                {avatar ? (
+                  <div
+                    class="edit-media"
+                    tabIndex="0"
+                    onClick={() => {
+                      states.showMediaModal = {
+                        mediaAttachments: avatarMediaAttachments,
+                        mediaIndex: 0,
+                      };
+                    }}
+                  >
+                    <img src={avatar} alt="" />
+                  </div>
+                ) : (
+                  <div class="edit-media"></div>
+                )}
+                {avatarPreview && (
+                  <>
+                    <Icon icon="arrow-right" />
+                    <div
+                      class="edit-media"
+                      tabIndex="0"
+                      onClick={() => {
+                        states.showMediaModal = {
+                          mediaAttachments: avatarMediaAttachments,
+                          mediaIndex: 1,
+                        };
+                      }}
+                    >
+                      <img src={avatarPreview} alt="" />
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
             <p>
               <label>
-                Name{' '}
+                <Trans>Name</Trans>{' '}
                 <input
                   type="text"
                   name="display_name"
@@ -2026,7 +2508,7 @@ function EditProfileSheet({ onClose = () => {} }) {
             </p>
             <p>
               <label>
-                Bio
+                <Trans>Bio</Trans>
                 <textarea
                   defaultValue={note}
                   name="note"
@@ -2038,12 +2520,18 @@ function EditProfileSheet({ onClose = () => {} }) {
               </label>
             </p>
             {/* Table for fields; name and values are in fields, min 4 rows */}
-            <p>Extra fields</p>
+            <p>
+              <Trans>Extra fields</Trans>
+            </p>
             <table ref={fieldsAttributesRef}>
               <thead>
                 <tr>
-                  <th>Label</th>
-                  <th>Content</th>
+                  <th>
+                    <Trans>Label</Trans>
+                  </th>
+                  <th>
+                    <Trans>Content</Trans>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -2072,10 +2560,10 @@ function EditProfileSheet({ onClose = () => {} }) {
                   onClose?.();
                 }}
               >
-                Cancel
+                <Trans>Cancel</Trans>
               </button>
               <button type="submit" disabled={uiState === 'loading'}>
-                Save
+                <Trans>Save</Trans>
               </button>
             </footer>
           </form>
@@ -2119,20 +2607,116 @@ function AccountHandleInfo({ acct, instance }) {
   // acct = username or username@server
   let [username, server] = acct.split('@');
   if (!server) server = instance;
+  const encodedAcct = punycode.toASCII(acct);
   return (
     <div class="handle-info">
-      <span class="handle-handle">
+      <span class="handle-handle" title={encodedAcct}>
         <b class="handle-username">{username}</b>
         <span class="handle-at">@</span>
         <b class="handle-server">{server}</b>
       </span>
       <div class="handle-legend">
         <span class="ib">
-          <span class="handle-legend-icon username" /> username
+          <span class="handle-legend-icon username" /> <Trans>username</Trans>
         </span>{' '}
         <span class="ib">
-          <span class="handle-legend-icon server" /> server domain name
+          <span class="handle-legend-icon server" />{' '}
+          <Trans>server domain name</Trans>
         </span>
+      </div>
+    </div>
+  );
+}
+
+function Endorsements({
+  accountID: id,
+  info,
+  open = false,
+  onlyOpenIfHasEndorsements = false,
+}) {
+  const { masto } = api();
+  const endorsementsContainer = useRef();
+  const [endorsementsUIState, setEndorsementsUIState] = useState('default');
+  const [endorsements, setEndorsements] = useState([]);
+  const [relationshipsMap, setRelationshipsMap] = useState({});
+  useEffect(() => {
+    if (!supports('@mastodon/endorsements')) return;
+    if (!open) return;
+    (async () => {
+      setEndorsementsUIState('loading');
+      try {
+        const accounts = await masto.v1.accounts.$select(id).endorsements.list({
+          limit: ENDORSEMENTS_LIMIT,
+        });
+        console.log({ endorsements: accounts });
+        if (!accounts.length) {
+          setEndorsementsUIState('default');
+          return;
+        }
+        setEndorsements(accounts);
+        setEndorsementsUIState('default');
+        setTimeout(() => {
+          endorsementsContainer.current.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest',
+          });
+        }, 300);
+
+        const relationships = await fetchRelationships(
+          accounts,
+          relationshipsMap,
+        );
+        if (relationships) {
+          setRelationshipsMap(relationships);
+        }
+      } catch (e) {
+        console.error(e);
+        setEndorsementsUIState('error');
+      }
+    })();
+  }, [open, id]);
+
+  const reallyOpen = onlyOpenIfHasEndorsements
+    ? open && endorsements.length > 0
+    : open;
+
+  if (!reallyOpen) return null;
+
+  return (
+    <div class="shazam-container">
+      <div class="shazam-container-inner">
+        <div class="endorsements-container" ref={endorsementsContainer}>
+          <h3>
+            <Trans>Profiles featured by @{info.username}</Trans>
+          </h3>
+          {endorsementsUIState === 'loading' ? (
+            <p class="ui-state">
+              <Loader abrupt />
+            </p>
+          ) : endorsements.length > 0 ? (
+            <ul
+              class={`endorsements ${
+                endorsements.length > 10 ? 'expanded' : ''
+              }`}
+            >
+              {endorsements.map((account) => (
+                <li>
+                  <AccountBlock
+                    key={account.id}
+                    account={account}
+                    showStats
+                    avatarSize="xxl"
+                    relationship={relationshipsMap[account.id]}
+                  />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p class="ui-state insignificant">
+              <Trans>No featured profiles.</Trans>
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
