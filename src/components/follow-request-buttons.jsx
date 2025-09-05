@@ -1,3 +1,4 @@
+import { Trans, useLingui } from '@lingui/react/macro';
 import { useState } from 'preact/hooks';
 
 import { api } from '../utils/api';
@@ -6,6 +7,7 @@ import Icon from './icon';
 import Loader from './loader';
 
 function FollowRequestButtons({ accountID, onChange }) {
+  const { t } = useLingui();
   const { masto } = api();
   const [uiState, setUIState] = useState('default');
   const [requestState, setRequestState] = useState(null); // accept, reject
@@ -38,7 +40,7 @@ function FollowRequestButtons({ accountID, onChange }) {
           })();
         }}
       >
-        Accept
+        <Trans>Accept</Trans>
       </button>{' '}
       <button
         type="button"
@@ -64,14 +66,18 @@ function FollowRequestButtons({ accountID, onChange }) {
           })();
         }}
       >
-        Reject
+        <Trans>Reject</Trans>
       </button>
       <span class="follow-request-states">
         {hasRelationship && requestState ? (
           requestState === 'accept' ? (
-            <Icon icon="check-circle" alt="Accepted" class="follow-accepted" />
+            <Icon
+              icon="check-circle"
+              alt={t`Accepted`}
+              class="follow-accepted"
+            />
           ) : (
-            <Icon icon="x-circle" alt="Rejected" class="follow-rejected" />
+            <Icon icon="x-circle" alt={t`Rejected`} class="follow-rejected" />
           )
         ) : (
           <Loader hidden={uiState !== 'loading'} />
