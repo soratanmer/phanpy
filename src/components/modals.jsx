@@ -1,3 +1,4 @@
+import { useLingui } from '@lingui/react/macro';
 import { useEffect } from 'preact/hooks';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { subscribe, useSnapshot } from 'valtio';
@@ -16,6 +17,7 @@ import GenericAccounts from './generic-accounts';
 import MediaAltModal from './media-alt-modal';
 import MediaModal from './media-modal';
 import Modal from './modal';
+import OpenLinkSheet from './open-link-sheet';
 import ReportModal from './report-modal';
 import ShortcutsSettings from './shortcuts-settings';
 
@@ -29,6 +31,7 @@ subscribe(states, (changes) => {
 });
 
 export default function Modals() {
+  const { t } = useLingui();
   const snapStates = useSnapshot(states);
   const navigate = useNavigate();
   const location = useLocation();
@@ -61,27 +64,36 @@ export default function Modals() {
               null
             }
             onClose={(results) => {
-              const { newStatus, instance, type } = results || {};
+              const { newStatus, instance, type, scheduledAt } = results || {};
               states.showCompose = false;
               window.__COMPOSE__ = null;
               if (newStatus) {
                 states.reloadStatusPage++;
+                if (scheduledAt) states.reloadScheduledPosts++;
                 showToast({
                   text: {
-                    post: 'Post published. Check it out.',
-                    reply: 'Reply posted. Check it out.',
-                    edit: 'Post updated. Check it out.',
+                    post: scheduledAt
+                      ? t`Post scheduled`
+                      : t`Post published. Check it out.`,
+                    reply: scheduledAt
+                      ? t`Reply scheduled`
+                      : t`Reply posted. Check it out.`,
+                    edit: t`Post updated. Check it out.`,
                   }[type || 'post'],
                   delay: 1000,
                   duration: 10_000, // 10 seconds
                   onClick: (toast) => {
                     toast.hideToast();
                     states.prevLocation = location;
-                    navigate(
-                      instance
-                        ? `/${instance}/s/${newStatus.id}`
-                        : `/s/${newStatus.id}`,
-                    );
+                    if (scheduledAt) {
+                      navigate('/sp');
+                    } else {
+                      navigate(
+                        instance
+                          ? `/${instance}/s/${newStatus.id}`
+                          : `/s/${newStatus.id}`,
+                      );
+                    }
                   },
                 });
               }
@@ -134,6 +146,21 @@ export default function Modals() {
           />
         </Modal>
       )}
+      {!!snapStates.showOpenLink && (
+        <Modal
+          onClose={() => {
+            states.showOpenLink = false;
+          }}
+        >
+          <OpenLinkSheet
+            url={snapStates.showOpenLink.url}
+            linkText={snapStates.showOpenLink.linkText}
+            onClose={() => {
+              states.showOpenLink = false;
+            }}
+          />
+        </Modal>
+      )}
       {!!snapStates.showDrafts && (
         <Modal
           onClose={() => {
@@ -157,7 +184,7 @@ export default function Modals() {
           <MediaModal
             mediaAttachments={snapStates.showMediaModal.mediaAttachments}
             instance={snapStates.showMediaModal.instance}
-            index={snapStates.showMediaModal.index}
+            index={snapStates.showMediaModal.mediaIndex}
             statusID={snapStates.showMediaModal.statusID}
             onClose={() => {
               states.showMediaModal = false;
