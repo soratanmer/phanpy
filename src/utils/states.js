@@ -31,6 +31,7 @@ const states = proxy({
     id: null,
     counter: 0,
   },
+  reloadScheduledPosts: 0,
   spoilers: {},
   spoilersMedia: {},
   scrollPositions: {},
@@ -204,23 +205,58 @@ export function saveStatus(status, instance, opts) {
   if (!override && oldStatus) return;
   if (deepEqual(status, oldStatus)) return;
   queueMicrotask(() => {
-    const key = statusKey(status.id, instance);
+    let key = statusKey(status.id, instance);
     if (oldStatus?._pinned) status._pinned = oldStatus._pinned;
     // if (oldStatus?._filtered) status._filtered = oldStatus._filtered;
     states.statuses[key] = status;
     if (status.reblog?.id) {
       const srKey = statusKey(status.reblog.id, instance);
       states.statuses[srKey] = status.reblog;
+      // Re-assign key to the actual status
+      key = srKey;
     }
-    if (status.quote?.id) {
-      const sKey = statusKey(status.quote.id, instance);
-      states.statuses[sKey] = status.quote;
+    const theQuote = status.reblog?.quote || status.quote;
+    if (theQuote?.id) {
+      const { id } = theQuote;
+      const sKey = statusKey(id, instance);
+      states.statuses[sKey] = theQuote;
+      const selfURL = `/${instance}/s/${id}`;
       states.statusQuotes[key] = [
         {
-          id: status.quote.id,
+          id,
           instance,
+          url: selfURL,
+          native: true,
         },
       ];
+    }
+    // Mastodon native quotes
+    if (theQuote?.state) {
+      const { quotedStatus, state } = theQuote;
+      if (quotedStatus?.id) {
+        const { id } = quotedStatus;
+        const selfURL = `/${instance}/s/${id}`;
+        const sKey = statusKey(id, instance);
+        states.statuses[sKey] = quotedStatus;
+        states.statusQuotes[key] = [
+          {
+            id,
+            instance,
+            url: selfURL,
+            state,
+            native: true,
+          },
+        ];
+      } else {
+        // Possibly "revoked"
+        states.statusQuotes[key] = [
+          {
+            // There's not much info here
+            state,
+            native: true,
+          },
+        ];
+      }
     }
   });
 
