@@ -1,5 +1,6 @@
 import './drafts.css';
 
+import { Trans, useLingui } from '@lingui/react/macro';
 import { useEffect, useMemo, useReducer, useState } from 'react';
 
 import { api } from '../utils/api';
@@ -13,6 +14,7 @@ import Loader from './loader';
 import MenuConfirm from './menu-confirm';
 
 function Drafts({ onClose }) {
+  const { t } = useLingui();
   const { masto } = api();
   const [uiState, setUIState] = useState('default');
   const [drafts, setDrafts] = useState([]);
@@ -29,9 +31,7 @@ function Drafts({ onClose }) {
           if (ownKeys.length) {
             const drafts = await db.drafts.getMany(ownKeys);
             drafts.sort(
-              (a, b) =>
-                new Date(b.updatedAt).getTime() -
-                new Date(a.updatedAt).getTime(),
+              (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt),
             );
             setDrafts(drafts);
           } else {
@@ -54,17 +54,20 @@ function Drafts({ onClose }) {
     <div class="sheet">
       {!!onClose && (
         <button type="button" class="sheet-close" onClick={onClose}>
-          <Icon icon="x" />
+          <Icon icon="x" alt={t`Close`} />
         </button>
       )}
       <header>
         <h2>
-          Unsent drafts <Loader abrupt hidden={uiState !== 'loading'} />
+          <Trans>Unsent drafts</Trans>{' '}
+          <Loader abrupt hidden={uiState !== 'loading'} />
         </h2>
         {hasDrafts && (
           <div class="insignificant">
-            Looks like you have unsent drafts. Let's continue where you left
-            off.
+            <Trans>
+              Looks like you have unsent drafts. Let's continue where you left
+              off.
+            </Trans>
           </div>
         )}
       </header>
@@ -73,7 +76,7 @@ function Drafts({ onClose }) {
           <>
             <ul class="drafts-list">
               {drafts.map((draft) => {
-                const { updatedAt, key, draftStatus, replyTo } = draft;
+                const { updatedAt, key, draftStatus, replyTo, quote } = draft;
                 const updatedAtDate = new Date(updatedAt);
                 return (
                   <li key={updatedAt}>
@@ -83,7 +86,9 @@ function Drafts({ onClose }) {
                         <time>
                           {!!replyTo && (
                             <>
-                              @{replyTo.account.acct}
+                              <span class="bidi-isolate">
+                                @{replyTo.account.acct}
+                              </span>
                               <br />
                             </>
                           )}
@@ -91,7 +96,11 @@ function Drafts({ onClose }) {
                         </time>
                       </b>
                       <MenuConfirm
-                        confirmLabel={<span>Delete this draft?</span>}
+                        confirmLabel={
+                          <span>
+                            <Trans>Delete this draft?</Trans>
+                          </span>
+                        }
                         menuItemClassName="danger"
                         align="end"
                         disabled={uiState === 'loading'}
@@ -104,7 +113,7 @@ function Drafts({ onClose }) {
                               reload();
                               // }
                             } catch (e) {
-                              alert('Error deleting draft! Please try again.');
+                              alert(t`Error deleting draft! Please try again.`);
                             }
                           })();
                         }}
@@ -114,7 +123,7 @@ function Drafts({ onClose }) {
                           class="small light"
                           disabled={uiState === 'loading'}
                         >
-                          Delete&hellip;
+                          <Trans>Delete…</Trans>
                         </button>
                       </MenuConfirm>
                     </div>
@@ -125,23 +134,40 @@ function Drafts({ onClose }) {
                       onClick={async () => {
                         // console.log({ draftStatus });
                         let replyToStatus;
-                        if (replyTo) {
+                        let quoteStatus;
+                        if (replyTo?.id || quote?.id) {
                           setUIState('loading');
-                          try {
-                            replyToStatus = await masto.v1.statuses
-                              .$select(replyTo.id)
-                              .fetch();
-                          } catch (e) {
-                            console.error(e);
-                            alert('Error fetching reply-to status!');
-                            setUIState('default');
-                            return;
+                          if (replyTo) {
+                            try {
+                              replyToStatus = await masto.v1.statuses
+                                .$select(replyTo.id)
+                                .fetch();
+                            } catch (e) {
+                              console.error(e);
+                              alert(t`Error fetching reply-to status!`);
+                              setUIState('default');
+                              return;
+                            }
+                          }
+                          if (quote) {
+                            try {
+                              quoteStatus = await masto.v1.statuses
+                                .$select(quote.id)
+                                .fetch();
+                            } catch (e) {
+                              console.error(e);
+                              alert(t`Error fetching quoted status!`);
+                              setUIState('default');
+                              // Don't return. Fail and still allow draft without quote
+                              // return;
+                            }
                           }
                           setUIState('default');
                         }
                         window.__COMPOSE__ = {
                           draftStatus,
                           replyToStatus,
+                          quoteStatus,
                         };
                         states.showCompose = true;
                         states.showDrafts = false;
@@ -156,7 +182,11 @@ function Drafts({ onClose }) {
             {drafts.length > 1 && (
               <p>
                 <MenuConfirm
-                  confirmLabel={<span>Delete all drafts?</span>}
+                  confirmLabel={
+                    <span>
+                      <Trans>Delete all drafts?</Trans>
+                    </span>
+                  }
                   menuItemClassName="danger"
                   disabled={uiState === 'loading'}
                   onClick={() => {
@@ -172,7 +202,7 @@ function Drafts({ onClose }) {
                         reload();
                       } catch (e) {
                         console.error(e);
-                        alert('Error deleting drafts! Please try again.');
+                        alert(t`Error deleting drafts! Please try again.`);
                         setUIState('error');
                       }
                       // }
@@ -184,14 +214,16 @@ function Drafts({ onClose }) {
                     class="light danger"
                     disabled={uiState === 'loading'}
                   >
-                    Delete all&hellip;
+                    <Trans>Delete all…</Trans>
                   </button>
                 </MenuConfirm>
               </p>
             )}
           </>
         ) : (
-          <p>No drafts found.</p>
+          <p>
+            <Trans>No drafts found.</Trans>
+          </p>
         )}
       </main>
     </div>
@@ -199,11 +231,13 @@ function Drafts({ onClose }) {
 }
 
 function MiniDraft({ draft }) {
-  const { draftStatus, replyTo } = draft;
+  const { t } = useLingui();
+  const { draftStatus, replyTo, quote } = draft;
   const { status, spoilerText, poll, mediaAttachments } = draftStatus;
   const hasPoll = poll?.options?.length > 0;
   const hasMedia = mediaAttachments?.length > 0;
-  const hasPollOrMedia = hasPoll || hasMedia;
+  const hasQuote = !!quote?.id;
+  const hasPollOrMedia = hasPoll || hasMedia || hasQuote;
   const firstImageMedia = useMemo(() => {
     if (!hasMedia) return;
     const image = mediaAttachments.find((media) => /image/.test(media.type));
@@ -226,13 +260,14 @@ function MiniDraft({ draft }) {
                 : {}
             }
           >
-            {hasPoll && <Icon icon="poll" />}
+            {hasPoll && <Icon icon="poll" alt={t`Poll`} />}
             {hasMedia && (
               <span>
-                <Icon icon="attachment" />{' '}
+                <Icon icon="attachment" alt={t`Media`} />{' '}
                 <small>{mediaAttachments?.length}</small>
               </span>
             )}
+            {hasQuote && <Icon icon="quote" alt={t`Quote`} />}
           </div>
         )}
         <div class="mini-draft-main">
