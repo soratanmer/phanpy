@@ -2,11 +2,14 @@ import { satisfies } from 'compare-versions';
 
 import features from '../data/features.json';
 
-import { getCurrentInstance } from './store-utils';
+import { getCurrentInstance, getCurrentNodeInfo } from './store-utils';
 
 // Non-semver(?) UA string detection
 const containPixelfed = /pixelfed/i;
 const notContainPixelfed = /^(?!.*pixelfed).*$/i;
+const containPleroma = /pleroma/i;
+const containAkkoma = /akkoma/i;
+const containGTS = /gotosocial/i;
 const platformFeatures = {
   '@mastodon/lists': notContainPixelfed,
   '@mastodon/filters': notContainPixelfed,
@@ -17,15 +20,28 @@ const platformFeatures = {
   '@mastodon/post-edit': notContainPixelfed,
   '@mastodon/profile-edit': notContainPixelfed,
   '@mastodon/profile-private-note': notContainPixelfed,
+  '@mastodon/pinned-posts': notContainPixelfed,
   '@pixelfed/trending': containPixelfed,
   '@pixelfed/home-include-reblogs': containPixelfed,
   '@pixelfed/global-feed': containPixelfed,
+  '@pleroma/local-visibility-post': containPleroma,
+  '@akkoma/local-visibility-post': containAkkoma,
 };
+
 const supportsCache = {};
+
+const semverExtract = /^\d+\.\d+(\.\d+)?/;
 
 function supports(feature) {
   try {
-    const { version, domain } = getCurrentInstance();
+    let { version, domain } = getCurrentInstance();
+    let softwareName = getCurrentNodeInfo()?.software?.name || 'mastodon';
+
+    if (softwareName === 'hometown') {
+      // Hometown is a Mastodon fork and inherits its features
+      softwareName = 'mastodon';
+    }
+
     const key = `${domain}-${feature}`;
     if (supportsCache[key]) return supportsCache[key];
 
@@ -35,10 +51,29 @@ function supports(feature) {
 
     const range = features[feature];
     if (!range) return false;
-    return (supportsCache[key] = satisfies(version, range, {
+
+    // '@mastodon/blah' => 'mastodon'
+    const featureSoftware = feature.match(/^@([a-z]+)\//)[1];
+
+    const doesSoftwareMatch = featureSoftware === softwareName.toLowerCase();
+    let satisfiesRange = satisfies(version, range, {
       includePrerelease: true,
       loose: true,
-    }));
+    });
+    if (!satisfiesRange) {
+      try {
+        // E.g. "4.2.1 (compatible; Iceshrimp 2023.12.14-dev-046d237af)" is invalid semver 😅
+        // This regex extracts numbers with dots out and tries again
+        // Hopefully this doesn't break anything
+        satisfiesRange = satisfies(version.match(semverExtract)?.[0], range, {
+          includePrerelease: true,
+          loose: false,
+        });
+      } catch (e) {
+        // Ignore
+      }
+    }
+    return (supportsCache[key] = doesSoftwareMatch && satisfiesRange);
   } catch (e) {
     return false;
   }
