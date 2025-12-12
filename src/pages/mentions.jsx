@@ -1,3 +1,4 @@
+import { Trans, useLingui } from '@lingui/react/macro';
 import { useMemo, useRef, useState } from 'preact/hooks';
 import { useSearchParams } from 'react-router-dom';
 
@@ -12,21 +13,24 @@ const LIMIT = 20;
 const emptySearchParams = new URLSearchParams();
 
 function Mentions({ columnMode, ...props }) {
+  const { t } = useLingui();
   const { masto, instance } = api();
   const [searchParams] = columnMode ? [emptySearchParams] : useSearchParams();
   const [stateType, setStateType] = useState(null);
   const type = props?.type || searchParams.get('type') || stateType;
-  useTitle(`Mentions${type === 'private' ? ' (Private)' : ''}`, '/mentions');
+  useTitle(type === 'private' ? t`Private mentions` : t`Mentions`, '/mentions');
 
   const mentionsIterator = useRef();
   const latestItem = useRef();
 
   async function fetchMentions(firstLoad) {
     if (firstLoad || !mentionsIterator.current) {
-      mentionsIterator.current = masto.v1.notifications.list({
-        limit: LIMIT,
-        types: ['mention'],
-      });
+      mentionsIterator.current = masto.v1.notifications
+        .list({
+          limit: LIMIT,
+          types: ['mention'],
+        })
+        .values();
     }
     const results = await mentionsIterator.current.next();
     let { value } = results;
@@ -52,9 +56,11 @@ function Mentions({ columnMode, ...props }) {
   const latestConversationItem = useRef();
   async function fetchConversations(firstLoad) {
     if (firstLoad || !conversationsIterator.current) {
-      conversationsIterator.current = masto.v1.conversations.list({
-        limit: LIMIT,
-      });
+      conversationsIterator.current = masto.v1.conversations
+        .list({
+          limit: LIMIT,
+        })
+        .values();
     }
     const results = await conversationsIterator.current.next();
     let { value } = results;
@@ -91,6 +97,7 @@ function Mentions({ columnMode, ...props }) {
             limit: 1,
             since_id: latestConversationItem.current,
           })
+          .values()
           .next();
         let { value } = results;
         console.log(
@@ -116,6 +123,7 @@ function Mentions({ columnMode, ...props }) {
             types: ['mention'],
             since_id: latestItem.current,
           })
+          .values()
           .next();
         let { value } = results;
         console.log('checkForUpdates ALL', latestItem.current, value);
@@ -143,7 +151,7 @@ function Mentions({ columnMode, ...props }) {
             }
           }}
         >
-          All
+          <Trans>All</Trans>
         </Link>
         <Link
           to="/mentions?type=private"
@@ -155,7 +163,7 @@ function Mentions({ columnMode, ...props }) {
             }
           }}
         >
-          Private
+          <Trans>Private</Trans>
         </Link>
       </div>
     );
@@ -163,16 +171,17 @@ function Mentions({ columnMode, ...props }) {
 
   return (
     <Timeline
-      title="Mentions"
+      title={t`Mentions`}
       id="mentions"
-      emptyText="No one mentioned you :("
-      errorText="Unable to load mentions."
+      emptyText={t`No one mentioned you :(`}
+      errorText={t`Unable to load mentions.`}
       instance={instance}
       fetchItems={fetchItems}
       checkForUpdates={checkForUpdates}
       useItemID
       timelineStart={TimelineStart}
       refresh={type}
+      filterContext="notifications"
     />
   );
 }
