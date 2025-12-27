@@ -1,9 +1,12 @@
 import './report-modal.css';
 
+import { msg } from '@lingui/core/macro';
+import { Trans, useLingui } from '@lingui/react/macro';
 import { Fragment } from 'preact';
 import { useMemo, useRef, useState } from 'preact/hooks';
 
 import { api } from '../utils/api';
+import localeMatch from '../utils/locale-match';
 import showToast from '../utils/show-toast';
 import { getCurrentInstance } from '../utils/store-utils';
 
@@ -15,7 +18,7 @@ import Status from './status';
 // NOTE: `dislike` hidden for now, it's actually not used for reporting
 // Mastodon shows another screen for unfollowing, muting or blocking instead of reporting
 
-const CATEGORIES = [, /*'dislike'*/ 'spam', 'legal', 'violation', 'other'];
+const CATEGORIES = [/*'dislike' ,*/ 'spam', 'legal', 'violation', 'other'];
 // `violation` will be set if there are `rule_ids[]`
 
 const CATEGORIES_INFO = {
@@ -24,34 +27,77 @@ const CATEGORIES_INFO = {
   //   description: 'Not something you want to see',
   // },
   spam: {
-    label: 'Spam',
-    description: 'Malicious links, fake engagement, or repetitive replies',
+    label: msg`Spam`,
+    description: msg`Malicious links, fake engagement, or repetitive replies`,
   },
   legal: {
-    label: 'Illegal',
-    description: "Violates the law of your or the server's country",
+    label: msg`Illegal`,
+    description: msg`Violates the law of your or the server's country`,
   },
   violation: {
-    label: 'Server rule violation',
-    description: 'Breaks specific server rules',
-    stampLabel: 'Violation',
+    label: msg`Server rule violation`,
+    description: msg`Breaks specific server rules`,
+    stampLabel: msg`Violation`,
   },
   other: {
-    label: 'Other',
-    description: "Issue doesn't fit other categories",
+    label: msg`Other`,
+    description: msg`Issue doesn't fit other categories`,
     excludeStamp: true,
   },
 };
 
+function findMatchingLanguage(rule, currentLang) {
+  if (!rule.translations || !currentLang) return null;
+  const availableLanguages = Object.keys(rule.translations);
+  if (!availableLanguages?.length) return null;
+
+  let matchedLang = localeMatch([currentLang], availableLanguages, null);
+  if (!matchedLang) {
+    // localeMatch fails if there are keys like zhCn, zhTw
+    // Convert them something like zh-CN first, try again
+    // Detect uppercase, then split by dash
+    const normalizedLanguages = availableLanguages.map((lang) => {
+      const parts = lang.split(/(?=[A-Z])/);
+      return parts
+        .map((part, i) => (i === 0 ? part : part.toLowerCase()))
+        .join('-');
+    });
+    matchedLang = localeMatch([currentLang], normalizedLanguages, null);
+  }
+
+  // If matchedLang has dash, convert back to original format
+  // E.g. zh-cn to zhCn
+  if (matchedLang && matchedLang.includes('-')) {
+    const [lang, region] = matchedLang.split('-');
+    matchedLang = lang + region.charAt(0).toUpperCase() + region.slice(1);
+  }
+
+  return matchedLang;
+}
+
+function translateRules(rules, currentLang) {
+  if (!rules?.length) return [];
+  if (!currentLang) return rules;
+  return rules.map((rule) => {
+    const matchedLang = findMatchingLanguage(rule, currentLang);
+    return {
+      ...rule,
+      _translatedText: rule.translations?.[matchedLang]?.text || null,
+    };
+  });
+}
+
 function ReportModal({ account, post, onClose }) {
+  const { _, t, i18n } = useLingui();
   const { masto } = api();
   const [uiState, setUIState] = useState('default');
   const [username, domain] = account.acct.split('@');
 
-  const [rules, currentDomain] = useMemo(() => {
+  const [translatedRules, currentDomain] = useMemo(() => {
     const { rules, domain } = getCurrentInstance();
-    return [rules || [], domain];
-  });
+    const rawRules = rules || [];
+    return [translateRules(rawRules, i18n.locale), domain];
+  }, [i18n.locale]);
 
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [showRules, setShowRules] = useState(false);
@@ -62,14 +108,14 @@ function ReportModal({ account, post, onClose }) {
   return (
     <div class="report-modal-container">
       <div class="top-controls">
-        <h1>{post ? 'Report Post' : `Report @${username}`}</h1>
+        <h1>{post ? t`Report Post` : t`Report @${username}`}</h1>
         <button
           type="button"
           class="plain4 small"
           disabled={uiState === 'loading'}
           onClick={() => onClose()}
         >
-          <Icon icon="x" size="xl" />
+          <Icon icon="x" size="xl" alt={t`Close`} />
         </button>
       </div>
       <main>
@@ -93,9 +139,13 @@ function ReportModal({ account, post, onClose }) {
               key={selectedCategory}
               aria-hidden="true"
             >
-              {CATEGORIES_INFO[selectedCategory].stampLabel ||
-                CATEGORIES_INFO[selectedCategory].label}
-              <small>Pending review</small>
+              {_(
+                CATEGORIES_INFO[selectedCategory].stampLabel ||
+                  _(CATEGORIES_INFO[selectedCategory].label),
+              )}
+              <small>
+                <Trans>Pending review</Trans>
+              </small>
             </span>
           )}
         <form
@@ -136,7 +186,7 @@ function ReportModal({ account, post, onClose }) {
                   forward,
                 });
                 setUIState('success');
-                showToast(post ? 'Post reported' : 'Profile reported');
+                showToast(post ? t`Post reported` : t`Profile reported`);
                 onClose();
               } catch (error) {
                 console.error(error);
@@ -144,8 +194,8 @@ function ReportModal({ account, post, onClose }) {
                 showToast(
                   error?.message ||
                     (post
-                      ? 'Unable to report post'
-                      : 'Unable to report profile'),
+                      ? t`Unable to report post`
+                      : t`Unable to report profile`),
                 );
               }
             })();
@@ -153,12 +203,12 @@ function ReportModal({ account, post, onClose }) {
         >
           <p>
             {post
-              ? `What's the issue with this post?`
-              : `What's the issue with this profile?`}
+              ? t`What's the issue with this post?`
+              : t`What's the issue with this profile?`}
           </p>
           <section class="report-categories">
             {CATEGORIES.map((category) =>
-              category === 'violation' && !rules?.length ? null : (
+              category === 'violation' && !translatedRules?.length ? null : (
                 <Fragment key={category}>
                   <label class="report-category">
                     <input
@@ -173,20 +223,20 @@ function ReportModal({ account, post, onClose }) {
                       }}
                     />
                     <span>
-                      {CATEGORIES_INFO[category].label} &nbsp;
+                      {_(CATEGORIES_INFO[category].label)} &nbsp;
                       <small class="ib insignificant">
-                        {CATEGORIES_INFO[category].description}
+                        {_(CATEGORIES_INFO[category].description)}
                       </small>
                     </span>
                   </label>
-                  {category === 'violation' && !!rules?.length && (
+                  {category === 'violation' && !!translatedRules?.length && (
                     <div
                       class="shazam-container no-animation"
                       hidden={!showRules}
                     >
                       <div class="shazam-container-inner">
                         <div class="report-rules" ref={rulesRef}>
-                          {rules.map((rule, i) => (
+                          {translatedRules.map((rule, i) => (
                             <label class="report-rule" key={rule.id}>
                               <input
                                 type="checkbox"
@@ -209,7 +259,7 @@ function ReportModal({ account, post, onClose }) {
                                   }
                                 }}
                               />
-                              <span>{rule.text}</span>
+                              <span>{rule._translatedText || rule.text}</span>
                             </label>
                           ))}
                         </div>
@@ -222,7 +272,9 @@ function ReportModal({ account, post, onClose }) {
           </section>
           <section class="report-comment">
             <p>
-              <label for="report-comment">Additional info</label>
+              <label for="report-comment">
+                <Trans>Additional info</Trans>
+              </label>
             </p>
             <textarea
               maxlength="1000"
@@ -230,6 +282,7 @@ function ReportModal({ account, post, onClose }) {
               name="comment"
               id="report-comment"
               disabled={uiState === 'loading'}
+              required={!post} // Required if not reporting a post
             />
           </section>
           {!!domain && domain !== currentDomain && (
@@ -243,7 +296,9 @@ function ReportModal({ account, post, onClose }) {
                     disabled={uiState === 'loading'}
                   />{' '}
                   <span>
-                    Forward to <i>{domain}</i>
+                    <Trans>
+                      Forward to <i>{domain}</i>
+                    </Trans>
                   </span>
                 </label>
               </p>
@@ -251,7 +306,7 @@ function ReportModal({ account, post, onClose }) {
           )}
           <footer>
             <button type="submit" disabled={uiState === 'loading'}>
-              Send Report
+              <Trans>Send Report</Trans>
             </button>{' '}
             <button
               type="submit"
@@ -260,15 +315,17 @@ function ReportModal({ account, post, onClose }) {
               onClick={async () => {
                 try {
                   await masto.v1.accounts.$select(account.id).mute(); // Infinite duration
-                  showToast(`Muted ${username}`);
+                  showToast(t`Muted ${username}`);
                 } catch (e) {
                   console.error(e);
-                  showToast(`Unable to mute ${username}`);
+                  showToast(t`Unable to mute ${username}`);
                 }
                 // onSubmit will still run
               }}
             >
-              Send Report <small class="ib">+ Mute profile</small>
+              <Trans>
+                Send Report <small class="ib">+ Mute profile</small>
+              </Trans>
             </button>{' '}
             <button
               type="submit"
@@ -277,15 +334,17 @@ function ReportModal({ account, post, onClose }) {
               onClick={async () => {
                 try {
                   await masto.v1.accounts.$select(account.id).block();
-                  showToast(`Blocked ${username}`);
+                  showToast(t`Blocked ${username}`);
                 } catch (e) {
                   console.error(e);
-                  showToast(`Unable to block ${username}`);
+                  showToast(t`Unable to block ${username}`);
                 }
                 // onSubmit will still run
               }}
             >
-              Send Report <small class="ib">+ Block profile</small>
+              <Trans>
+                Send Report <small class="ib">+ Block profile</small>
+              </Trans>
             </button>
             <Loader hidden={uiState !== 'loading'} />
           </footer>
