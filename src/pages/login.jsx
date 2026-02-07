@@ -1,22 +1,36 @@
 import './login.css';
 
+import { Trans, useLingui } from '@lingui/react/macro';
 import Fuse from 'fuse.js';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { useSearchParams } from 'react-router-dom';
 
 import logo from '../assets/logo.svg';
 
+import LangSelector from '../components/lang-selector';
 import Link from '../components/link';
 import Loader from '../components/loader';
 import instancesListURL from '../data/instances.json?url';
-import { getAuthorizationURL, registerApplication } from '../utils/auth';
+import {
+  getAuthorizationURL,
+  getPKCEAuthorizationURL,
+  registerApplication,
+} from '../utils/auth';
+import { openAuthPopup, watchAuthPopup } from '../utils/auth-popup';
+import { supportsPKCE } from '../utils/oauth-pkce';
 import store from '../utils/store';
+import {
+  getCredentialApplication,
+  hasAccountInInstance,
+  storeCredentialApplication,
+} from '../utils/store-utils';
 import useTitle from '../utils/useTitle';
 
 const { PHANPY_DEFAULT_INSTANCE: DEFAULT_INSTANCE } = import.meta.env;
 
 function Login() {
-  useTitle('Log in');
+  const { t } = useLingui();
+  useTitle(t`Log in`, '/login');
   const instanceURLRef = useRef();
   const cachedInstanceURL = store.local.get('instanceURL');
   const [uiState, setUIState] = useState('default');
@@ -51,28 +65,101 @@ function Login() {
 
   const submitInstance = (instanceURL) => {
     if (!instanceURL) return;
-    store.local.set('instanceURL', instanceURL);
 
     (async () => {
+      // WEB_DOMAIN vs LOCAL_DOMAIN negotiation time
+      // https://docs.joinmastodon.org/admin/config/#web_domain
+      try {
+        const res = await fetch(`https://${instanceURL}/.well-known/host-meta`); // returns XML
+        const text = await res.text();
+        // Parse XML
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(text, 'text/xml');
+        // Get Link[template]
+        const link = xmlDoc.getElementsByTagName('Link')[0];
+        const template = link.getAttribute('template');
+        const url = URL.parse(template);
+        const { host } = url; // host includes the port
+        if (instanceURL !== host) {
+          console.log(`💫 ${instanceURL} -> ${host}`);
+          instanceURL = host;
+        }
+      } catch (e) {
+        // Silently fail
+        console.error(e);
+      }
+
+      store.local.set('instanceURL', instanceURL);
+
       setUIState('loading');
       try {
-        const { client_id, client_secret, vapid_key } =
-          await registerApplication({
+        let credentialApplication = getCredentialApplication(instanceURL);
+        if (
+          !credentialApplication ||
+          !credentialApplication.client_id ||
+          !credentialApplication.client_secret
+        ) {
+          credentialApplication = await registerApplication({
             instanceURL,
           });
-
-        if (client_id && client_secret) {
-          store.session.set('clientID', client_id);
-          store.session.set('clientSecret', client_secret);
-          store.session.set('vapidKey', vapid_key);
-
-          location.href = await getAuthorizationURL({
-            instanceURL,
-            client_id,
-          });
-        } else {
-          alert('Failed to register application');
+          storeCredentialApplication(instanceURL, credentialApplication);
         }
+
+        const { client_id, client_secret } = credentialApplication;
+
+        const authPKCE = await supportsPKCE({ instanceURL });
+        console.log({ authPKCE });
+        const forceLogin = hasAccountInInstance(instanceURL);
+
+        let authUrl;
+        if (authPKCE && window.isSecureContext) {
+          if (client_id && client_secret) {
+            const [url, verifier] = await getPKCEAuthorizationURL({
+              instanceURL,
+              client_id,
+              forceLogin,
+            });
+            store.sessionCookie.set('codeVerifier', verifier);
+            authUrl = url;
+          } else {
+            alert(t`Failed to register application`);
+            setUIState('default');
+            return;
+          }
+        } else {
+          if (client_id && client_secret) {
+            authUrl = await getAuthorizationURL({
+              instanceURL,
+              client_id,
+              forceLogin,
+            });
+          } else {
+            alert(t`Failed to register application`);
+            setUIState('default');
+            return;
+          }
+        }
+
+        const popup = openAuthPopup(authUrl);
+
+        if (popup) {
+          watchAuthPopup(
+            popup,
+            (code) => {
+              const callbackUrl = `${window.location.origin}${window.location.pathname}?code=${encodeURIComponent(code)}`;
+              window.location.href = callbackUrl;
+            },
+            (error) => {
+              console.error('Popup auth error:', error);
+              setUIState('error');
+            },
+          );
+        } else {
+          // Popup blocked, fallback to redirect
+          console.log('Popup blocked, falling back to redirect');
+          location.href = authUrl;
+        }
+
         setUIState('default');
       } catch (e) {
         console.error(e);
@@ -103,10 +190,10 @@ function Login() {
   const selectedInstanceText = instanceTextLooksLikeDomain
     ? cleanInstanceText
     : instancesSuggestions?.length
-    ? instancesSuggestions[0]
-    : instanceText
-    ? instancesList.find((instance) => instance.includes(instanceText))
-    : null;
+      ? instancesSuggestions[0]
+      : instanceText
+        ? instancesList.find((instance) => instance.includes(instanceText))
+        : null;
 
   const onSubmit = (e) => {
     e.preventDefault();
@@ -137,10 +224,12 @@ function Login() {
         <h1>
           <img src={logo} alt="" width="80" height="80" />
           <br />
-          Log in
+          <Trans>Log in</Trans>
         </h1>
         <label>
-          <p>Instance</p>
+          <p>
+            <Trans>Server</Trans>
+          </p>
           <input
             value={instanceText}
             required
@@ -154,7 +243,8 @@ function Login() {
             autocapitalize="off"
             autocomplete="off"
             spellCheck={false}
-            placeholder="instance domain"
+            placeholder={t`server domain`}
+            enterKeyHint="go"
             onInput={(e) => {
               setInstanceText(e.target.value);
             }}
@@ -177,7 +267,9 @@ function Login() {
               ))}
             </ul>
           ) : (
-            <div id="instances-eg">e.g. &ldquo;mastodon.social&rdquo;</div>
+            <div id="instances-eg">
+              <Trans>e.g. &ldquo;mastodon.social&rdquo;</Trans>
+            </div>
           )}
           {/* <datalist id="instances-list">
             {instancesList.map((instance) => (
@@ -187,7 +279,9 @@ function Login() {
         </label>
         {uiState === 'error' && (
           <p class="error">
-            Failed to log in. Please try again or another instance.
+            <Trans>
+              Failed to log in. Please try again or try another server.
+            </Trans>
           </p>
         )}
         <div>
@@ -197,8 +291,8 @@ function Login() {
             }
           >
             {selectedInstanceText
-              ? `Continue with ${selectedInstanceText}`
-              : 'Continue'}
+              ? t`Continue with ${selectedInstanceText}`
+              : t`Continue`}
           </button>{' '}
         </div>
         <Loader hidden={uiState !== 'loading'} />
@@ -206,13 +300,16 @@ function Login() {
         {!DEFAULT_INSTANCE && (
           <p>
             <a href="https://joinmastodon.org/servers" target="_blank">
-              Don't have an account? Create one!
+              <Trans>Don't have an account? Create one!</Trans>
             </a>
           </p>
         )}
         <p>
-          <Link to="/">Go home</Link>
+          <Link to="/">
+            <Trans>Go home</Trans>
+          </Link>
         </p>
+        <LangSelector />
       </form>
     </main>
   );
