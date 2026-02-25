@@ -1,5 +1,7 @@
 import './account-block.css';
 
+import { Plural, Trans, useLingui } from '@lingui/react/macro';
+
 // import { useNavigate } from 'react-router-dom';
 import enhanceContent from '../utils/enhance-content';
 import niceDateTime from '../utils/nice-date-time';
@@ -9,6 +11,7 @@ import states from '../utils/states';
 import Avatar from './avatar';
 import EmojiText from './emoji-text';
 import Icon from './icon';
+import RolesTags from './roles-tags';
 
 function AccountBlock({
   skeleton,
@@ -26,6 +29,7 @@ function AccountBlock({
   relationship = {},
   excludeRelationshipAttrs = [],
 }) {
+  const { t } = useLingui();
   if (skeleton) {
     return (
       <div class="account-block skeleton">
@@ -63,6 +67,7 @@ function AccountBlock({
     followersCount,
     createdAt,
     locked,
+    roles,
   } = account;
   let [_, acct1, acct2] = acct.match(/([^@]+)(@.+)/i) || [, acct];
   if (accountInstance) {
@@ -103,17 +108,24 @@ function AccountBlock({
         }
       }}
     >
-      <Avatar
-        url={useAvatarStatic ? avatarStatic : avatar || avatarStatic}
-        size={avatarSize}
-        squircle={bot}
-      />
+      <div class="avatar-container">
+        <Avatar
+          url={useAvatarStatic ? avatarStatic : avatar || avatarStatic}
+          staticUrl={useAvatarStatic ? undefined : avatarStatic}
+          size={avatarSize}
+          squircle={bot}
+        />
+      </div>
       <span class="account-block-content">
         {!hideDisplayName && (
           <>
             {displayName ? (
               <b>
-                <EmojiText text={displayName} emojis={emojis} />
+                <EmojiText
+                  text={displayName}
+                  emojis={emojis}
+                  resolverURL={url}
+                />
               </b>
             ) : (
               <b>{username}</b>
@@ -128,20 +140,24 @@ function AccountBlock({
           {locked && (
             <>
               {' '}
-              <Icon icon="lock" size="s" alt="Locked" />
+              <Icon icon="lock" size="s" alt={t`Locked`} />
             </>
           )}
         </span>
+        <RolesTags roles={roles} accountUrl={url} />
         {showActivity && (
           <div class="account-block-stats">
-            Posts: {shortenNumber(statusesCount)}
+            <Trans>Posts: {shortenNumber(statusesCount)}</Trans>
             {!!lastStatusAt && (
               <>
                 {' '}
-                &middot; Last posted:{' '}
-                {niceDateTime(lastStatusAt, {
-                  hideTime: true,
-                })}
+                &middot;{' '}
+                <Trans>
+                  Last posted:{' '}
+                  {niceDateTime(lastStatusAt, {
+                    hideTime: true,
+                  })}
+                </Trans>
               </>
             )}
           </div>
@@ -151,14 +167,14 @@ function AccountBlock({
             {bot && (
               <>
                 <span class="tag collapsed">
-                  <Icon icon="bot" /> Automated
+                  <Icon icon="bot" /> <Trans>Automated</Trans>
                 </span>
               </>
             )}
             {!!group && (
               <>
                 <span class="tag collapsed">
-                  <Icon icon="group" /> Group
+                  <Icon icon="group" /> <Trans>Group</Trans>
                 </span>
               </>
             )}
@@ -167,26 +183,37 @@ function AccountBlock({
                 <div class="shazam-container-inner">
                   {excludedRelationship.following &&
                   excludedRelationship.followedBy ? (
-                    <span class="tag minimal">Mutual</span>
+                    <span class="tag minimal">
+                      <Trans>Mutual</Trans>
+                    </span>
                   ) : excludedRelationship.requested ? (
-                    <span class="tag minimal">Requested</span>
+                    <span class="tag minimal">
+                      <Trans>Requested</Trans>
+                    </span>
                   ) : excludedRelationship.following ? (
-                    <span class="tag minimal">Following</span>
+                    <span class="tag minimal">
+                      <Trans>Following</Trans>
+                    </span>
                   ) : excludedRelationship.followedBy ? (
-                    <span class="tag minimal">Follows you</span>
+                    <span class="tag minimal">
+                      <Trans>Follows you</Trans>
+                    </span>
                   ) : null}
                 </div>
               </div>
             )}
             {!!followersCount && (
               <span class="ib">
-                {shortenNumber(followersCount)}{' '}
-                {followersCount === 1 ? 'follower' : 'followers'}
+                <Plural
+                  value={followersCount}
+                  one="# follower"
+                  other="# followers"
+                />
               </span>
             )}
             {!!verifiedField && (
               <span class="verified-field">
-                <Icon icon="check-circle" size="s" />{' '}
+                <Icon icon="check-circle" size="s" alt={t`Verified`} />{' '}
                 <span
                   dangerouslySetInnerHTML={{
                     __html: enhanceContent(verifiedField.value, { emojis }),
@@ -201,12 +228,14 @@ function AccountBlock({
               !verifiedField &&
               !!createdAt && (
                 <span class="created-at">
-                  Joined{' '}
-                  <time datetime={createdAt}>
-                    {niceDateTime(createdAt, {
-                      hideTime: true,
-                    })}
-                  </time>
+                  <Trans>
+                    Joined{' '}
+                    <time datetime={createdAt}>
+                      {niceDateTime(createdAt, {
+                        hideTime: true,
+                      })}
+                    </time>
+                  </Trans>
                 </span>
               )}
           </div>

@@ -1,24 +1,37 @@
 import './accounts.css';
 
 import { useAutoAnimate } from '@formkit/auto-animate/preact';
-import { Menu, MenuDivider, MenuItem } from '@szhsin/react-menu';
+import { Trans, useLingui } from '@lingui/react/macro';
+import { MenuDivider, MenuItem } from '@szhsin/react-menu';
 import { useReducer } from 'preact/hooks';
 
 import Avatar from '../components/avatar';
 import Icon from '../components/icon';
 import Link from '../components/link';
 import MenuConfirm from '../components/menu-confirm';
+import MenuLink from '../components/menu-link';
 import Menu2 from '../components/menu2';
 import NameText from '../components/name-text';
+import RelativeTime from '../components/relative-time';
 import { api } from '../utils/api';
+import { revokeAccessToken } from '../utils/auth';
+import niceDateTime from '../utils/nice-date-time';
 import states from '../utils/states';
 import store from '../utils/store';
-import { getCurrentAccountID, setCurrentAccountID } from '../utils/store-utils';
+import {
+  getAccounts,
+  getCurrentAccountID,
+  saveAccounts,
+  setCurrentAccountID,
+} from '../utils/store-utils';
+
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
 
 function Accounts({ onClose }) {
+  const { t } = useLingui();
   const { masto } = api();
   // Accounts
-  const accounts = store.local.getJSON('accounts');
+  const accounts = getAccounts();
   const currentAccount = getCurrentAccountID();
   const moreThanOneAccount = accounts.length > 1;
 
@@ -29,11 +42,13 @@ function Accounts({ onClose }) {
     <div id="accounts-container" class="sheet" tabIndex="-1">
       {!!onClose && (
         <button type="button" class="sheet-close" onClick={onClose}>
-          <Icon icon="x" />
+          <Icon icon="x" alt={t`Close`} />
         </button>
       )}
       <header class="header-grid">
-        <h2>Accounts</h2>
+        <h2>
+          <Trans>Accounts</Trans>
+        </h2>
       </header>
       <main>
         <section>
@@ -41,12 +56,33 @@ function Accounts({ onClose }) {
             {accounts.map((account, i) => {
               const isCurrent = account.info.id === currentAccount;
               const isDefault = i === 0; // first account is always default
+              const isLoggedOut = !account.accessToken;
+
+              const removeAccount = () => {
+                accounts.splice(i, 1);
+                saveAccounts(accounts);
+                try {
+                  if (store.session.get('currentAccount') === account.info.id) {
+                    store.session.del('currentAccount');
+                  }
+                } catch (e) {}
+              };
+
+              const logOutAccount = async () => {
+                await revokeAccessToken({
+                  instanceURL: account.instanceURL,
+                  client_id: account.clientId,
+                  client_secret: account.clientSecret,
+                  token: account.accessToken,
+                });
+              };
+
               return (
                 <li key={account.info.id}>
                   <div>
                     {moreThanOneAccount && (
                       <span class={`current ${isCurrent ? 'is-current' : ''}`}>
-                        <Icon icon="check-circle" alt="Current" />
+                        <Icon icon="check-circle" alt={t`Current`} />
                       </span>
                     )}
                     <Avatar
@@ -60,7 +96,7 @@ function Accounts({ onClose }) {
                               .fetch();
                             console.log('fetched account info', info);
                             account.info = info;
-                            store.local.setJSON('accounts', accounts);
+                            saveAccounts(accounts);
                             reload();
                           } catch (e) {}
                         }
@@ -79,7 +115,10 @@ function Accounts({ onClose }) {
                       }
                       showAcct
                       onClick={() => {
-                        if (isCurrent) {
+                        if (isLoggedOut) {
+                          location.href = `/#/login?instance=${account.instanceURL}`;
+                          onClose();
+                        } else if (isCurrent) {
                           states.showAccount = `${account.info.username}@${account.instanceURL}`;
                         } else {
                           setCurrentAccountID(account.info.id);
@@ -89,69 +128,203 @@ function Accounts({ onClose }) {
                     />
                   </div>
                   <div class="actions">
+                    {isLoggedOut && (
+                      <span class="tag">
+                        <Trans>Logged out</Trans>
+                      </span>
+                    )}
                     {isDefault && moreThanOneAccount && (
                       <>
-                        <span class="tag">Default</span>{' '}
+                        <span class="tag">
+                          <Trans>Default</Trans>
+                        </span>{' '}
                       </>
                     )}
                     <Menu2
                       align="end"
                       menuButton={
-                        <button
-                          type="button"
-                          title="More"
-                          class="plain more-button"
-                        >
-                          <Icon icon="more" size="l" alt="More" />
+                        <button type="button" class="plain more-button">
+                          <Icon icon="more" size="l" alt={t`More`} />
                         </button>
                       }
                     >
+                      {moreThanOneAccount && (
+                        <>
+                          <MenuItem
+                            disabled={isCurrent || isLoggedOut}
+                            onClick={() => {
+                              setCurrentAccountID(account.info.id);
+                              location.reload();
+                            }}
+                          >
+                            <Icon icon="transfer" />{' '}
+                            <Trans>Switch to this account</Trans>
+                          </MenuItem>
+                          {!isStandalone && !isCurrent && !isLoggedOut && (
+                            <MenuLink
+                              href={`./?account=${account.info.id}`}
+                              target="_blank"
+                            >
+                              <Icon icon="external" />
+                              <span>
+                                <Trans>Switch in new tab/window</Trans>
+                              </span>
+                            </MenuLink>
+                          )}
+                          <MenuDivider />
+                        </>
+                      )}
                       <MenuItem
                         onClick={() => {
                           states.showAccount = `${account.info.username}@${account.instanceURL}`;
                         }}
                       >
                         <Icon icon="user" />
-                        <span>View profile…</span>
+                        <span>
+                          <Trans>View profile…</Trans>
+                        </span>
                       </MenuItem>
                       <MenuDivider />
                       {moreThanOneAccount && (
-                        <MenuItem
-                          disabled={isDefault}
+                        <>
+                          <MenuItem
+                            disabled={isDefault || isLoggedOut}
+                            onClick={() => {
+                              // Move account to the top of the list
+                              accounts.splice(i, 1);
+                              accounts.unshift(account);
+                              saveAccounts(accounts);
+                              reload();
+                            }}
+                          >
+                            <Icon icon="check-circle" />
+                            <span>
+                              <Trans>Set as default</Trans>
+                            </span>
+                          </MenuItem>
+                          <MenuItem
+                            disabled={i <= 1}
+                            onClick={() => {
+                              // Move account one position up
+                              accounts.splice(i, 1);
+                              accounts.splice(i - 1, 0, account);
+                              saveAccounts(accounts);
+                              reload();
+                            }}
+                          >
+                            <Icon icon="arrow-up" />
+                            <span>
+                              <Trans>Move up</Trans>
+                            </span>
+                          </MenuItem>
+                          <MenuItem
+                            disabled={i === 0 || i === accounts.length - 1}
+                            onClick={() => {
+                              // Move account one position down
+                              accounts.splice(i, 1);
+                              accounts.splice(i + 1, 0, account);
+                              saveAccounts(accounts);
+                              reload();
+                            }}
+                          >
+                            <Icon icon="arrow-down" />
+                            <span>
+                              <Trans>Move down</Trans>
+                            </span>
+                          </MenuItem>
+                          <MenuDivider />
+                        </>
+                      )}
+                      {!isLoggedOut ? (
+                        <MenuConfirm
+                          subMenu
+                          confirmLabel={
+                            <>
+                              <Icon icon="exit" />
+                              <span>
+                                <Trans>
+                                  Log out{' '}
+                                  <span class="bidi-isolate">
+                                    @{account.info.acct}
+                                  </span>
+                                  ?
+                                </Trans>
+                              </span>
+                            </>
+                          }
+                          menuItemClassName="danger"
+                          onClick={async () => {
+                            await logOutAccount();
+                            delete account.accessToken;
+                            saveAccounts(accounts);
+                            reload();
+                          }}
+                          menuExtras={
+                            <MenuItem
+                              className="danger"
+                              onClick={async () => {
+                                await logOutAccount();
+                                removeAccount();
+                                location.href = location.pathname || '/';
+                              }}
+                            >
+                              <Icon icon="x" />
+                              <span>
+                                <Trans>
+                                  Log out and remove{' '}
+                                  <span class="bidi-isolate">
+                                    @{account.info.acct}
+                                  </span>
+                                </Trans>
+                              </span>
+                            </MenuItem>
+                          }
+                        >
+                          <Icon icon="exit" />
+                          <span>
+                            <Trans>Log out…</Trans>
+                          </span>
+                        </MenuConfirm>
+                      ) : (
+                        <MenuConfirm
+                          subMenu
+                          confirmLabel={
+                            <>
+                              <Icon icon="x" />
+                              <span>
+                                <Trans>
+                                  Remove{' '}
+                                  <span class="bidi-isolate">
+                                    @{account.info.acct}
+                                  </span>
+                                  ?
+                                </Trans>
+                              </span>
+                            </>
+                          }
+                          menuItemClassName="danger"
                           onClick={() => {
-                            // Move account to the top of the list
-                            accounts.splice(i, 1);
-                            accounts.unshift(account);
-                            store.local.setJSON('accounts', accounts);
+                            removeAccount();
                             reload();
                           }}
                         >
-                          <Icon icon="check-circle" />
-                          <span>Set as default</span>
-                        </MenuItem>
+                          <Icon icon="x" />
+                          <span>
+                            <Trans>Remove account…</Trans>
+                          </span>
+                        </MenuConfirm>
                       )}
-                      <MenuConfirm
-                        subMenu
-                        confirmLabel={
-                          <>
-                            <Icon icon="exit" />
-                            <span>Log out @{account.info.acct}?</span>
-                          </>
-                        }
-                        disabled={!isCurrent}
-                        menuItemClassName="danger"
-                        onClick={() => {
-                          // const yes = confirm('Log out?');
-                          // if (!yes) return;
-                          accounts.splice(i, 1);
-                          store.local.setJSON('accounts', accounts);
-                          // location.reload();
-                          location.href = location.pathname || '/';
-                        }}
-                      >
-                        <Icon icon="exit" />
-                        <span>Log out…</span>
-                      </MenuConfirm>
+                      {!!account?.createdAt && (
+                        <div class="footer">
+                          <Icon icon="account-add" />
+                          <span>
+                            <Trans>
+                              Connected on {niceDateTime(account.createdAt)} (
+                              <RelativeTime datetime={account.createdAt} />)
+                            </Trans>
+                          </span>
+                        </div>
+                      )}
                     </Menu2>
                   </div>
                 </li>
@@ -160,17 +333,31 @@ function Accounts({ onClose }) {
           </ul>
           <p>
             <Link to="/login" class="button plain2" onClick={onClose}>
-              <Icon icon="plus" /> <span>Add an existing account</span>
+              <Icon icon="plus" />{' '}
+              <span>
+                <Trans>Add an existing account</Trans>
+              </span>
             </Link>
           </p>
           {moreThanOneAccount && (
             <p>
               <small>
-                Note: <i>Default</i> account will always be used for first load.
-                Switched accounts will persist during the session.
+                <Trans>
+                  Note: <i>Default</i> account will always be used for first
+                  load. Switched accounts will persist during the session.
+                </Trans>
               </small>
             </p>
           )}
+          <p>
+            <button
+              type="button"
+              class="light"
+              onClick={() => (states.showImportExportAccounts = true)}
+            >
+              <Trans>Import/export</Trans>
+            </button>
+          </p>
         </section>
       </main>
     </div>

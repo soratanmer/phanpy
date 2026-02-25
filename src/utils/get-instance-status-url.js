@@ -5,13 +5,16 @@ const statusPostRegexes = [
   /^\/@[^@\/]+\/(?:statuses|posts)\/([^\/]+)/i, // GoToSocial, Takahe
   /\/notes\/([^\/]+)/i, // Misskey, Firefish
   /^\/(?:notice|objects)\/([a-z0-9-]+)/i, // Pleroma
+  /\/@[^@\/]+\/post\/([^\/]+)/i, // Threads
   /\/@[^@\/]+@?[^\/]+?\/([^\/]+)/i, // Mastodon
   /^\/p\/[^\/]+\/([^\/]+)/i, // Pixelfed
 ];
 
 export function getInstanceStatusObject(url) {
   // Regex /:username/:id, where username = @username or @username@domain, id = anything
-  const { hostname, pathname } = URL.parse(url);
+  const theURL = URL.parse(url);
+  if (!theURL) return {};
+  const { hostname, pathname } = theURL;
   // const [, username, domain, id] = pathname.match(statusRegex) || [];
   for (const regex of statusPostRegexes) {
     const [, id] = pathname.match(regex) || [];

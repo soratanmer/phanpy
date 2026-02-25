@@ -1,6 +1,7 @@
-import { Menu, MenuDivider, MenuItem } from '@szhsin/react-menu';
-import { useRef } from 'preact/hooks';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Trans, useLingui } from '@lingui/react/macro';
+import { MenuDivider, MenuItem } from '@szhsin/react-menu';
+import { useRef, useState } from 'preact/hooks';
+import { useParams } from 'react-router-dom';
 import { useSnapshot } from 'valtio';
 
 import Icon from '../components/icon';
@@ -9,27 +10,54 @@ import Timeline from '../components/timeline';
 import { api } from '../utils/api';
 import { filteredItems } from '../utils/filters';
 import states, { saveStatus } from '../utils/states';
+import store from '../utils/store';
 import supports from '../utils/supports';
+import { checkTimelineAccess } from '../utils/timeline-access';
 import useTitle from '../utils/useTitle';
 
 const LIMIT = 20;
 
 function Public({ local, columnMode, ...props }) {
+  const { t } = useLingui();
   const snapStates = useSnapshot(states);
   const isLocal = !!local;
   const params = columnMode ? {} : useParams();
-  const { masto, instance } = api({
+  const { masto, authenticated, instance } = api({
     instance: props?.instance || params.instance,
   });
-  const { masto: currentMasto, instance: currentInstance } = api();
-  const title = `${isLocal ? 'Local' : 'Federated'} timeline (${instance})`;
+  const { instance: currentInstance } = api();
+  const title = isLocal
+    ? t`Local timeline (${instance})`
+    : t`Federated timeline (${instance})`;
   useTitle(title, isLocal ? `/:instance?/p/l` : `/:instance?/p`);
   // const navigate = useNavigate();
   const latestItem = useRef();
 
+  // Timeline access: public, authenticated, disabled
+  const [timelineAccess, setTimelineAccess] = useState(null);
+  const isDisabled = timelineAccess === 'disabled';
+  const requiresAuth = timelineAccess === 'authenticated';
+  const isPrivate = requiresAuth && !authenticated;
+
   const publicIterator = useRef();
   async function fetchPublic(firstLoad) {
     if (firstLoad || !publicIterator.current) {
+      const access = await checkTimelineAccess({
+        feed: 'liveFeeds',
+        feedType: isLocal ? 'local' : 'remote',
+        instance,
+      });
+      setTimelineAccess(access);
+      if (
+        access === 'disabled' ||
+        (access === 'authenticated' && !authenticated)
+      ) {
+        return {
+          done: true,
+          value: [],
+        };
+      }
+
       const opts = {
         limit: LIMIT,
         local: isLocal || undefined,
@@ -37,7 +65,7 @@ function Public({ local, columnMode, ...props }) {
       if (!isLocal && supports('@pixelfed/global-feed')) {
         opts.remote = true;
       }
-      publicIterator.current = masto.v1.timelines.public.list(opts);
+      publicIterator.current = masto.v1.timelines.public.list(opts).values();
     }
     const results = await publicIterator.current.next();
     let { value } = results;
@@ -58,6 +86,7 @@ function Public({ local, columnMode, ...props }) {
   }
 
   async function checkForUpdates() {
+    if (isDisabled || isPrivate) return false;
     try {
       const results = await masto.v1.timelines.public
         .list({
@@ -65,6 +94,7 @@ function Public({ local, columnMode, ...props }) {
           local: isLocal,
           since_id: latestItem.current,
         })
+        .values()
         .next();
       let { value } = results;
       const valueContainsLatestItem = value[0]?.id === latestItem.current; // since_id might not be supported
@@ -84,14 +114,20 @@ function Public({ local, columnMode, ...props }) {
       title={title}
       titleComponent={
         <h1 class="header-double-lines">
-          <b>{isLocal ? 'Local timeline' : 'Federated timeline'}</b>
+          <b>{isLocal ? t`Local timeline` : t`Federated timeline`}</b>
           <div>{instance}</div>
         </h1>
       }
       id="public"
       instance={instance}
-      emptyText="No one has posted anything yet."
-      errorText="Unable to load posts"
+      emptyText={
+        isDisabled
+          ? t`This timeline is disabled on this server.`
+          : isPrivate
+            ? t`Login required to see posts from this server.`
+            : t`No one has posted anything yet.`
+      }
+      errorText={t`Unable to load posts`}
       fetchItems={fetchPublic}
       checkForUpdates={checkForUpdates}
       useItemID
@@ -108,18 +144,24 @@ function Public({ local, columnMode, ...props }) {
           position="anchor"
           menuButton={
             <button type="button" class="plain">
-              <Icon icon="more" size="l" />
+              <Icon icon="more" size="l" alt={t`More`} />
             </button>
           }
         >
           <MenuItem href={isLocal ? `/#/${instance}/p` : `/#/${instance}/p/l`}>
             {isLocal ? (
               <>
-                <Icon icon="transfer" /> <span>Switch to Federated</span>
+                <Icon icon="transfer" />{' '}
+                <span>
+                  <Trans>Switch to Federated</Trans>
+                </span>
               </>
             ) : (
               <>
-                <Icon icon="transfer" /> <span>Switch to Local</span>
+                <Icon icon="transfer" />{' '}
+                <span>
+                  <Trans>Switch to Local</Trans>
+                </span>
               </>
             )}
           </MenuItem>
@@ -127,10 +169,10 @@ function Public({ local, columnMode, ...props }) {
           <MenuItem
             onClick={() => {
               let newInstance = prompt(
-                'Enter a new instance e.g. "mastodon.social"',
+                t`Enter a new server e.g. "mastodon.social"`,
               );
               if (!/\./.test(newInstance)) {
-                if (newInstance) alert('Invalid instance');
+                if (newInstance) alert(t`Invalid server`);
                 return;
               }
               if (newInstance) {
@@ -142,7 +184,10 @@ function Public({ local, columnMode, ...props }) {
               }
             }}
           >
-            <Icon icon="bus" /> <span>Go to another instance…</span>
+            <Icon icon="bus" />{' '}
+            <span>
+              <Trans>Go to another server…</Trans>
+            </span>
           </MenuItem>
           {currentInstance !== instance && (
             <MenuItem
@@ -154,7 +199,9 @@ function Public({ local, columnMode, ...props }) {
             >
               <Icon icon="bus" />{' '}
               <small class="menu-double-lines">
-                Go to my instance (<b>{currentInstance}</b>)
+                <Trans>
+                  Go to my server (<b>{currentInstance}</b>)
+                </Trans>
               </small>
             </MenuItem>
           )}

@@ -1,3 +1,5 @@
+import { plural } from '@lingui/core/macro';
+import { Trans, useLingui } from '@lingui/react/macro';
 import { memo } from 'preact/compat';
 import {
   useCallback,
@@ -14,10 +16,15 @@ import { useSnapshot } from 'valtio';
 import FilterContext from '../utils/filter-context';
 import { filteredItems, isFiltered } from '../utils/filters';
 import isRTL from '../utils/is-rtl';
+import showToast from '../utils/show-toast';
 import states, { statusKey } from '../utils/states';
 import statusPeek from '../utils/status-peek';
 import { isMediaFirstInstance } from '../utils/store-utils';
-import { groupBoosts, groupContext } from '../utils/timeline-utils';
+import {
+  filterHiddenStatuses,
+  groupBoosts,
+  groupContext,
+} from '../utils/timeline-utils';
 import useInterval from '../utils/useInterval';
 import usePageVisibility from '../utils/usePageVisibility';
 import useScroll from '../utils/useScroll';
@@ -28,11 +35,12 @@ import Link from './link';
 import MediaPost from './media-post';
 import NavMenu from './nav-menu';
 import Status from './status';
+import ThreadBadge from './thread-badge';
 
 const scrollIntoViewOptions = {
-  block: 'nearest',
+  block: 'start',
   inline: 'center',
-  behavior: 'smooth',
+  behavior: 'instant',
 };
 
 function Timeline({
@@ -58,6 +66,7 @@ function Timeline({
   showReplyParent,
   clearWhenRefresh,
 }) {
+  const { t } = useLingui();
   const snapStates = useSnapshot(states);
   const [items, setItems] = useState([]);
   const [uiState, setUIState] = useState('start');
@@ -67,6 +76,7 @@ function Timeline({
   const scrollableRef = useRef();
 
   console.debug('RENDER Timeline', id, refresh);
+  __BENCHMARK.start(`timeline-${id}-load`);
 
   const mediaFirst = useMemo(() => isMediaFirstInstance(), []);
 
@@ -96,6 +106,7 @@ function Timeline({
               [[], []],
             );
             value = otherPosts;
+            value = filterHiddenStatuses(value, filterContext);
             if (allowGrouping) {
               if (boostsCarousel) {
                 value = groupBoosts(value);
@@ -117,9 +128,13 @@ function Timeline({
             setShowMore(false);
           }
           setUIState('default');
+          __BENCHMARK.end(`timeline-${id}-load`);
         } catch (e) {
           console.error(e);
           setUIState('error');
+          if (firstLoad && !items.length && errorText) {
+            showToast(errorText);
+          }
         } finally {
           loadItems.cancel();
         }
@@ -134,91 +149,141 @@ function Timeline({
 
   const itemsSelector = '.timeline-item, .timeline-item-alt';
 
-  const jRef = useHotkeys('j, shift+j', (_, handler) => {
-    // focus on next status after active item
-    const activeItem = document.activeElement.closest(itemsSelector);
-    const activeItemRect = activeItem?.getBoundingClientRect();
-    const allItems = Array.from(
-      scrollableRef.current.querySelectorAll(itemsSelector),
-    );
-    if (
-      activeItem &&
-      activeItemRect.top < scrollableRef.current.clientHeight &&
-      activeItemRect.bottom > 0
-    ) {
-      const activeItemIndex = allItems.indexOf(activeItem);
-      let nextItem = allItems[activeItemIndex + 1];
-      if (handler.shift) {
-        // get next status that's not .timeline-item-alt
-        nextItem = allItems.find(
-          (item, index) =>
-            index > activeItemIndex &&
-            !item.classList.contains('timeline-item-alt'),
-        );
-      }
-      if (nextItem) {
-        nextItem.focus();
-        nextItem.scrollIntoView(scrollIntoViewOptions);
-      }
-    } else {
-      // If active status is not in viewport, get the topmost status-link in viewport
-      const topmostItem = allItems.find((item) => {
-        const itemRect = item.getBoundingClientRect();
-        return itemRect.top >= 44 && itemRect.left >= 0; // 44 is the magic number for header height, not real
-      });
-      if (topmostItem) {
-        topmostItem.focus();
-        topmostItem.scrollIntoView(scrollIntoViewOptions);
-      }
-    }
-  });
+  const jRef = useHotkeys(
+    'j, shift+j',
+    (e, handler) => {
+      // Fix bug: shift+j is fired even when j is pressed due to useKey: true
+      if (e.shiftKey !== handler.shift) return;
 
-  const kRef = useHotkeys('k, shift+k', (_, handler) => {
-    // focus on previous status after active item
-    const activeItem = document.activeElement.closest(itemsSelector);
-    const activeItemRect = activeItem?.getBoundingClientRect();
-    const allItems = Array.from(
-      scrollableRef.current.querySelectorAll(itemsSelector),
-    );
-    if (
-      activeItem &&
-      activeItemRect.top < scrollableRef.current.clientHeight &&
-      activeItemRect.bottom > 0
-    ) {
-      const activeItemIndex = allItems.indexOf(activeItem);
-      let prevItem = allItems[activeItemIndex - 1];
-      if (handler.shift) {
-        // get prev status that's not .timeline-item-alt
-        prevItem = allItems.findLast(
-          (item, index) =>
-            index < activeItemIndex &&
-            !item.classList.contains('timeline-item-alt'),
-        );
+      // focus on next status after active item
+      const activeItem = document.activeElement.closest(itemsSelector);
+      const activeItemRect = activeItem?.getBoundingClientRect();
+      const allItems = Array.from(
+        scrollableRef.current.querySelectorAll(itemsSelector),
+      ).filter((item) => !!item.offsetHeight);
+      if (
+        activeItem &&
+        activeItemRect.top < scrollableRef.current.clientHeight &&
+        activeItemRect.bottom > 0
+      ) {
+        const activeItemIndex = allItems.indexOf(activeItem);
+        let nextItem = allItems[activeItemIndex + 1];
+        if (handler.shift) {
+          // get next status that's not .timeline-item-alt
+          nextItem = allItems.find(
+            (item, index) =>
+              index > activeItemIndex &&
+              !item.classList.contains('timeline-item-alt'),
+          );
+        }
+        if (nextItem) {
+          nextItem.focus();
+          nextItem.scrollIntoView(scrollIntoViewOptions);
+        }
+      } else {
+        // If active status is not in viewport, get the topmost status-link in viewport
+        const topmostItem = allItems.find((item) => {
+          const itemRect = item.getBoundingClientRect();
+          return itemRect.top >= 44 && itemRect.left >= 0; // 44 is the magic number for header height, not real
+        });
+        if (topmostItem) {
+          topmostItem.focus();
+          topmostItem.scrollIntoView(scrollIntoViewOptions);
+        }
       }
-      if (prevItem) {
-        prevItem.focus();
-        prevItem.scrollIntoView(scrollIntoViewOptions);
-      }
-    } else {
-      // If active status is not in viewport, get the topmost status-link in viewport
-      const topmostItem = allItems.find((item) => {
-        const itemRect = item.getBoundingClientRect();
-        return itemRect.top >= 44 && itemRect.left >= 0; // 44 is the magic number for header height, not real
-      });
-      if (topmostItem) {
-        topmostItem.focus();
-        topmostItem.scrollIntoView(scrollIntoViewOptions);
-      }
-    }
-  });
+    },
+    {
+      useKey: true,
+      ignoreEventWhen: (e) => e.metaKey || e.ctrlKey || e.altKey,
+    },
+  );
 
-  const oRef = useHotkeys(['enter', 'o'], () => {
-    // open active status
-    const activeItem = document.activeElement;
-    if (activeItem?.matches(itemsSelector)) {
-      activeItem.click();
-    }
-  });
+  const kRef = useHotkeys(
+    'k, shift+k',
+    (e, handler) => {
+      // Fix bug: shift+k is fired even when k is pressed due to useKey: true
+      if (e.shiftKey !== handler.shift) return;
+
+      // focus on previous status after active item
+      const activeItem = document.activeElement.closest(itemsSelector);
+      const activeItemRect = activeItem?.getBoundingClientRect();
+      const allItems = Array.from(
+        scrollableRef.current.querySelectorAll(itemsSelector),
+      ).filter((item) => !!item.offsetHeight);
+      if (
+        activeItem &&
+        activeItemRect.top < scrollableRef.current.clientHeight &&
+        activeItemRect.bottom > 0
+      ) {
+        const activeItemIndex = allItems.indexOf(activeItem);
+        let prevItem = allItems[activeItemIndex - 1];
+        if (handler.shift) {
+          // get prev status that's not .timeline-item-alt
+          prevItem = allItems.findLast(
+            (item, index) =>
+              index < activeItemIndex &&
+              !item.classList.contains('timeline-item-alt'),
+          );
+        }
+        if (prevItem) {
+          prevItem.focus();
+          prevItem.scrollIntoView(scrollIntoViewOptions);
+        }
+      } else {
+        // If active status is not in viewport, get the topmost status-link in viewport
+        const topmostItem = allItems.find((item) => {
+          const itemRect = item.getBoundingClientRect();
+          return itemRect.top >= 44 && itemRect.left >= 0; // 44 is the magic number for header height, not real
+        });
+        if (topmostItem) {
+          topmostItem.focus();
+          topmostItem.scrollIntoView(scrollIntoViewOptions);
+        }
+      }
+    },
+    {
+      useKey: true,
+      ignoreEventWhen: (e) => e.metaKey || e.ctrlKey || e.altKey,
+    },
+  );
+
+  const oRef = useHotkeys(
+    ['enter', 'o'],
+    (e, handler) => {
+      // open active status
+      const activeItem = document.activeElement;
+      if (activeItem?.matches(itemsSelector)) {
+        // find first media link and click it (not inside status-card)
+        const isO = handler.keys.join('') === 'o';
+        if (isO) {
+          const mediaLink = activeItem.querySelector(
+            'a.media:not(.status-card a.media)',
+          );
+          if (mediaLink) {
+            // if link is ?media-only=1, change to media=1 and go to it
+            const url = mediaLink.getAttribute('href');
+            if (/media\-only=/i.test(url)) {
+              const newURL = url.replace(/media\-only=/i, 'media=');
+              setTimeout(() => {
+                // Need timeout to prevent propagate to the o key handler in pages/status.jsx
+                location.hash = newURL;
+              }, 100);
+            } else {
+              mediaLink.click();
+            }
+          } else {
+            activeItem.click();
+          }
+        } else {
+          activeItem.click();
+        }
+      }
+    },
+    {
+      useKey: true,
+      ignoreEventWhen: (e) => e.metaKey || e.ctrlKey || e.altKey || e.shiftKey,
+    },
+  );
 
   const showNewPostsIndicator =
     items.length > 0 && uiState !== 'loading' && showNew;
@@ -229,7 +294,10 @@ function Timeline({
       behavior: 'smooth',
     });
   }, [loadItems, showNewPostsIndicator]);
-  const dotRef = useHotkeys('.', handleLoadNewPosts);
+  const dotRef = useHotkeys('.', handleLoadNewPosts, {
+    useKey: true,
+    ignoreEventWhen: (e) => e.metaKey || e.ctrlKey || e.altKey || e.shiftKey,
+  });
 
   // const {
   //   scrollDirection,
@@ -245,20 +313,8 @@ function Timeline({
   const headerRef = useRef();
   // const [hiddenUI, setHiddenUI] = useState(false);
   const [nearReachStart, setNearReachStart] = useState(false);
-  useScrollFn(
-    {
-      scrollableRef,
-      distanceFromEnd: 2,
-      scrollThresholdStart: 44,
-    },
-    ({
-      scrollDirection,
-      nearReachStart,
-      // nearReachEnd,
-      reachStart,
-      // reachEnd,
-    }) => {
-      // setHiddenUI(scrollDirection === 'end' && !nearReachEnd);
+  const scrollFnCallback = useCallback(
+    ({ scrollDirection, nearReachStart, reachStart }) => {
       if (headerRef.current) {
         const hiddenUI = scrollDirection === 'end' && !nearReachStart;
         headerRef.current.hidden = hiddenUI;
@@ -267,11 +323,16 @@ function Timeline({
       if (reachStart) {
         loadItems(true);
       }
-      // else if (nearReachEnd || (reachEnd && showMore)) {
-      //   loadItems();
-      // }
     },
-    [],
+    [setNearReachStart, loadItems],
+  );
+  const { resetScrollDirection } = useScrollFn(
+    {
+      scrollableRef,
+      distanceFromEnd: 2,
+      scrollThresholdStart: 44,
+    },
+    scrollFnCallback,
   );
 
   useEffect(() => {
@@ -397,6 +458,7 @@ function Timeline({
           ) {
             setTimeout(() => {
               headerRef.current.hidden = false;
+              resetScrollDirection();
             }, 250);
           }
         }}
@@ -427,7 +489,7 @@ function Timeline({
                   headerStart
                 ) : (
                   <Link to="/" class="button plain home-button">
-                    <Icon icon="home" size="l" />
+                    <Icon icon="home" size="l" alt={t`Home`} />
                   </Link>
                 )}
               </div>
@@ -443,7 +505,7 @@ function Timeline({
                 type="button"
                 onClick={handleLoadNewPosts}
               >
-                <Icon icon="arrow-up" /> New posts
+                <Icon icon="arrow-up" /> <Trans>New posts</Trans>
               </button>
             )}
           </header>
@@ -509,11 +571,13 @@ function Timeline({
                       onClick={() => loadItems()}
                       style={{ marginBlockEnd: '6em' }}
                     >
-                      Show more&hellip;
+                      <Trans>Show more…</Trans>
                     </button>
                   </InView>
                 ) : (
-                  <p class="ui-state insignificant">The end.</p>
+                  <p class="ui-state insignificant">
+                    <Trans>The end.</Trans>
+                  </p>
                 ))}
             </>
           ) : uiState === 'loading' ? (
@@ -542,7 +606,7 @@ function Timeline({
               <br />
               <br />
               <button type="button" onClick={() => loadItems(!items.length)}>
-                Try again
+                <Trans>Try again</Trans>
               </button>
             </p>
           )}
@@ -564,6 +628,7 @@ const TimelineItem = memo(
     showReplyParent,
     mediaFirst,
   }) => {
+    const { t } = useLingui();
     console.debug('RENDER TimelineItem', status.id);
     const { id: statusID, reblog, items, type, _pinned } = status;
     if (_pinned) useItemID = false;
@@ -576,9 +641,12 @@ const TimelineItem = memo(
       let fItems = filteredItems(items, filterContext);
       let title = '';
       if (type === 'boosts') {
-        title = `${fItems.length} Boosts`;
+        title = plural(fItems.length, {
+          one: '# Boost',
+          other: '# Boosts',
+        });
       } else if (type === 'pinned') {
-        title = 'Pinned posts';
+        title = t`Pinned posts`;
       }
       const isCarousel = type === 'boosts' || type === 'pinned';
       if (isCarousel) {
@@ -593,8 +661,12 @@ const TimelineItem = memo(
           // }
           const aFiltered = isFiltered(a.filtered, filterContext);
           const bFiltered = isFiltered(b.filtered, filterContext);
-          if (aFiltered) filteredItemsIDs.add(a.id);
-          if (bFiltered) filteredItemsIDs.add(b.id);
+          if (aFiltered && aFiltered?.action !== 'blur') {
+            filteredItemsIDs.add(a.id);
+          }
+          if (bFiltered && bFiltered?.action !== 'blur') {
+            filteredItemsIDs.add(b.id);
+          }
           if (aFiltered && !bFiltered) {
             return 1;
           }
@@ -824,28 +896,10 @@ const TimelineItem = memo(
 );
 
 function StatusCarousel({ title, class: className, children }) {
+  const { t } = useLingui();
   const carouselRef = useRef();
-  // const { reachStart, reachEnd, init } = useScroll({
-  //   scrollableRef: carouselRef,
-  //   direction: 'horizontal',
-  // });
   const startButtonRef = useRef();
   const endButtonRef = useRef();
-  // useScrollFn(
-  //   {
-  //     scrollableRef: carouselRef,
-  //     direction: 'horizontal',
-  //     init: true,
-  //   },
-  //   ({ reachStart, reachEnd }) => {
-  //     if (startButtonRef.current) startButtonRef.current.disabled = reachStart;
-  //     if (endButtonRef.current) endButtonRef.current.disabled = reachEnd;
-  //   },
-  //   [],
-  // );
-  // useEffect(() => {
-  //   init?.();
-  // }, []);
 
   const [render, setRender] = useState(false);
   useEffect(() => {
@@ -874,7 +928,7 @@ function StatusCarousel({ title, class: className, children }) {
               });
             }}
           >
-            <Icon icon="chevron-left" />
+            <Icon icon="chevron-left" alt={t`Previous`} />
           </button>{' '}
           <button
             ref={endButtonRef}
@@ -891,7 +945,7 @@ function StatusCarousel({ title, class: className, children }) {
               });
             }}
           >
-            <Icon icon="chevron-right" />
+            <Icon icon="chevron-right" alt={t`Next`} />
           </button>
         </span>
       </header>
@@ -917,6 +971,7 @@ function StatusCarousel({ title, class: className, children }) {
 }
 
 function TimelineStatusCompact({ status, instance, filterContext }) {
+  const { t } = useLingui();
   const snapStates = useSnapshot(states);
   const { id, visibility, language } = status;
   const statusPeekText = statusPeek(status);
@@ -929,30 +984,29 @@ function TimelineStatusCompact({ status, instance, filterContext }) {
       }`}
       tabindex="-1"
     >
-      {!!snapStates.statusThreadNumber[sKey] ? (
-        <div class="status-thread-badge">
-          <Icon icon="thread" size="s" />
-          {snapStates.statusThreadNumber[sKey]
-            ? ` ${snapStates.statusThreadNumber[sKey]}/X`
-            : ''}
-        </div>
-      ) : (
-        <div class="status-thread-badge">
-          <Icon icon="thread" size="s" />
-        </div>
-      )}
+      <div class="status-thread-badge-container">
+        <ThreadBadge index={snapStates.statusThreadNumber[sKey]} />
+      </div>
       <div
         class="content-compact"
         title={statusPeekText}
         lang={language}
         dir="auto"
       >
-        {!!filterInfo ? (
+        {!!filterInfo && filterInfo?.action !== 'blur' ? (
           <b
             class="status-filtered-badge badge-meta horizontal"
             title={filterInfo?.titlesStr || ''}
           >
-            <span>Filtered</span>: <span>{filterInfo?.titlesStr || ''}</span>
+            {filterInfo?.titlesStr ? (
+              <Trans>
+                <span>Filtered</span>: <span>{filterInfo.titlesStr}</span>
+              </Trans>
+            ) : (
+              <span>
+                <Trans>Filtered</Trans>
+              </span>
+            )}
           </b>
         ) : (
           <>
@@ -961,7 +1015,7 @@ function TimelineStatusCompact({ status, instance, filterContext }) {
               <>
                 {' '}
                 <span class="spoiler-badge">
-                  <Icon icon="eye-close" size="s" />
+                  <Icon icon="eye-close" size="s" alt={t`Content warning`} />
                 </span>
               </>
             )}
