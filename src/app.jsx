@@ -1,18 +1,25 @@
 import './app.css';
 
+import { useLingui } from '@lingui/react';
 import debounce from 'just-debounce-it';
+import { lazy, memo, Suspense } from 'preact/compat';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'preact/hooks';
-import { matchPath, Route, Routes, useLocation } from 'react-router-dom';
+  matchPath,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+} from 'react-router-dom';
 
 import 'swiped-events';
 
 import { subscribe } from 'valtio';
+import { unstable_enableOp } from 'valtio/vanilla';
+
+// https://github.com/pmndrs/valtio/releases/tag/v2.3.0
+// Necessary for subscribe() to work properly
+unstable_enableOp(true);
 
 import BackgroundService from './components/background-service';
 import ComposeButton from './components/compose-button';
@@ -20,11 +27,13 @@ import { ICONS } from './components/ICONS';
 import KeyboardShortcutsHelp from './components/keyboard-shortcuts-help';
 import Loader from './components/loader';
 import Modals from './components/modals';
+import NavigationCommand from './components/navigation-command';
 import NotificationService from './components/notification-service';
 import SearchCommand from './components/search-command';
 import Shortcuts from './components/shortcuts';
 import NotFound from './pages/404';
 import AccountStatuses from './pages/account-statuses';
+import AnnualReport from './pages/annual-report';
 import Bookmarks from './pages/bookmarks';
 import Catchup from './pages/catchup';
 import Favourites from './pages/favourites';
@@ -40,24 +49,60 @@ import Login from './pages/login';
 import Mentions from './pages/mentions';
 import Notifications from './pages/notifications';
 import Public from './pages/public';
+import ScheduledPosts from './pages/scheduled-posts';
 import Search from './pages/search';
 import StatusRoute from './pages/status-route';
 import Trending from './pages/trending';
 import Welcome from './pages/welcome';
 import {
   api,
+  hasInstance,
+  hasPreferences,
   initAccount,
   initClient,
   initInstance,
   initPreferences,
 } from './utils/api';
 import { getAccessToken } from './utils/auth';
+import { AuthProvider, useAuth } from './utils/auth-context';
 import focusDeck from './utils/focus-deck';
-import states, { initStates, statusKey } from './utils/states';
+import states, { hideAllModals, initStates, statusKey } from './utils/states';
 import store from './utils/store';
-import { getCurrentAccount, setCurrentAccountID } from './utils/store-utils';
+import {
+  getAccount,
+  getCredentialApplication,
+  getCurrentAccount,
+  getVapidKey,
+  setCurrentAccountID,
+} from './utils/store-utils';
 
 import './utils/toast-alert';
+
+// Lazy load Sandbox component only in development
+const Sandbox =
+  import.meta.env.DEV || import.meta.env.PHANPY_DEV
+    ? lazy(() => import('./pages/sandbox'))
+    : () => null;
+
+// Lazy load MockHome component only in development (not PHANPY_DEV)
+const MockHome = lazy(() => import('./pages/mock-home'));
+
+// Lazy load YearInPosts component
+const YearInPosts = lazy(() => import('./pages/year-in-posts'));
+
+// QR Scan Test component for development
+function QrScanTest() {
+  useEffect(() => {
+    states.showQrScannerModal = {
+      onClose: ({ text } = {}) => {
+        hideAllModals();
+        location.hash = text ? `/${text}` : '/';
+      },
+    };
+  }, []);
+
+  return null;
+}
 
 window.__STATES__ = states;
 window.__STATES_STATS__ = () => {
@@ -90,39 +135,42 @@ window.__STATES_STATS__ = () => {
 // Experimental "garbage collection" for states
 // Every 15 minutes
 // Only posts for now
-setInterval(() => {
-  if (!window.__IDLE__) return;
-  const { statuses, unfurledLinks, notifications } = states;
-  let keysCount = 0;
-  const { instance } = api();
-  for (const key in statuses) {
-    if (!window.__IDLE__) break;
-    try {
-      const $post = document.querySelector(
-        `[data-state-post-id~="${key}"], [data-state-post-ids~="${key}"]`,
-      );
-      const postInNotifications = notifications.some(
-        (n) => key === statusKey(n.status?.id, instance),
-      );
-      if (!$post && !postInNotifications) {
-        delete states.statuses[key];
-        delete states.statusQuotes[key];
-        for (const link in unfurledLinks) {
-          const unfurled = unfurledLinks[link];
-          const sKey = statusKey(unfurled.id, unfurled.instance);
-          if (sKey === key) {
-            delete states.unfurledLinks[link];
-            break;
+setInterval(
+  () => {
+    if (!window.__IDLE__) return;
+    const { statuses, unfurledLinks, notifications } = states;
+    let keysCount = 0;
+    const { instance } = api();
+    for (const key in statuses) {
+      if (!window.__IDLE__) break;
+      try {
+        const $post = document.querySelector(
+          `[data-state-post-id~="${key}"], [data-state-post-ids~="${key}"]`,
+        );
+        const postInNotifications = notifications.some(
+          (n) => key === statusKey(n.status?.id, instance),
+        );
+        if (!$post && !postInNotifications) {
+          delete states.statuses[key];
+          delete states.statusQuotes[key];
+          for (const link in unfurledLinks) {
+            const unfurled = unfurledLinks[link];
+            const sKey = statusKey(unfurled.id, unfurled.instance);
+            if (sKey === key) {
+              delete states.unfurledLinks[link];
+              break;
+            }
           }
+          keysCount++;
         }
-        keysCount++;
-      }
-    } catch (e) {}
-  }
-  if (keysCount) {
-    console.info(`GC: Removed ${keysCount} keys`);
-  }
-}, 15 * 60 * 1000);
+      } catch (e) {}
+    }
+    if (keysCount) {
+      console.info(`GC: Removed ${keysCount} keys`);
+    }
+  },
+  15 * 60 * 1000,
+);
 
 // Preload icons
 // There's probably a better way to do this
@@ -202,6 +250,12 @@ const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 if (isIOS) {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
+      // Don't reset theme color if media modal is showing
+      // Media modal will set its own theme color based on the media's color
+      const showingMediaModal =
+        document.getElementsByClassName('media-modal-container').length > 0;
+      if (showingMediaModal) return;
+
       const theme = store.local.get('theme');
       let $meta;
       if (theme) {
@@ -251,7 +305,7 @@ if (isIOS) {
     document.documentElement.classList.add(`is-${theme}`);
     document
       .querySelector('meta[name="color-scheme"]')
-      .setAttribute('content', theme || 'dark light');
+      .setAttribute('content', theme || 'light dark');
 
     // Enable manual theme <meta>
     const $manualMeta = document.querySelector(
@@ -296,9 +350,68 @@ subscribe(states, (changes) => {
   }
 });
 
+const BENCHES = new Map();
+window.__BENCH_RESULTS = new Map();
+window.__BENCHMARK = {
+  start(name) {
+    if (!import.meta.env.DEV && !import.meta.env.PHANPY_DEV) return;
+    // If already started, ignore
+    if (BENCHES.has(name)) return;
+    const start = performance.now();
+    BENCHES.set(name, start);
+  },
+  end(name) {
+    if (!import.meta.env.DEV && !import.meta.env.PHANPY_DEV) return;
+    const start = BENCHES.get(name);
+    if (start) {
+      const end = performance.now();
+      const duration = end - start;
+      __BENCH_RESULTS.set(name, duration);
+      BENCHES.delete(name);
+    }
+  },
+};
+
+if (import.meta.env.DEV) {
+  // If press shift down, set --time-scale to 10 in root
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Shift') {
+      document.documentElement.classList.add('slow-mo');
+    }
+  });
+  document.addEventListener('keyup', (e) => {
+    if (e.key === 'Shift') {
+      document.documentElement.classList.remove('slow-mo');
+    }
+  });
+}
+
+{
+  // Temporary Experiments
+  // May be removed in the future
+  document.body.classList.toggle(
+    'exp-tab-bar-v2',
+    store.local.get('experiments-tabBarV2') ?? false,
+  );
+}
+
+// const isPWA = true; // testing
+const isPWA =
+  window.matchMedia('(display-mode: standalone)').matches ||
+  window.navigator.standalone === true;
+const PATH_RESTORE_TIME_LIMIT = 1 * 60 * 60 * 1000; // 1 hour, should be good enough
+
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    const account = getCurrentAccount();
+    return !!account;
+  });
   const [uiState, setUIState] = useState('loading');
+  __BENCHMARK.start('app-init');
+  __BENCHMARK.start('time-to-following');
+  __BENCHMARK.start('time-to-home');
+  __BENCHMARK.start('time-to-isLoggedIn');
+  useLingui();
 
   useEffect(() => {
     const instanceURL = store.local.get('instanceURL');
@@ -308,6 +421,28 @@ function App() {
 
     if (code) {
       console.log({ code });
+
+      const isPopup = window.opener && !window.opener.closed;
+
+      if (isPopup) {
+        try {
+          window.opener.postMessage(
+            {
+              type: 'oauth-callback',
+              code: code,
+            },
+            window.location.origin,
+          );
+          setTimeout(() => {
+            window.close();
+          }, 100);
+        } catch (e) {
+          console.error('Failed to send message to parent window:', e);
+          window.close();
+        }
+        return;
+      }
+
       // Clear the code from the URL
       window.history.replaceState(
         {},
@@ -315,9 +450,13 @@ function App() {
         window.location.pathname || '/',
       );
 
-      const clientID = store.session.get('clientID');
-      const clientSecret = store.session.get('clientSecret');
-      const vapidKey = store.session.get('vapidKey');
+      const {
+        client_id: clientID,
+        client_secret: clientSecret,
+        vapid_key,
+      } = getCredentialApplication(instanceURL) || {};
+      const vapidKey = getVapidKey(instanceURL) || vapid_key;
+      const verifier = store.sessionCookie.get('codeVerifier');
 
       (async () => {
         setUIState('loading');
@@ -326,22 +465,54 @@ function App() {
           client_id: clientID,
           client_secret: clientSecret,
           code,
+          code_verifier: verifier || undefined,
         });
 
-        const client = initClient({ instance: instanceURL, accessToken });
-        await Promise.allSettled([
-          initPreferences(client),
-          initInstance(client, instanceURL),
-          initAccount(client, instanceURL, accessToken, vapidKey),
-        ]);
-        initStates();
+        if (accessToken) {
+          const client = initClient({ instance: instanceURL, accessToken });
+          await Promise.allSettled([
+            initPreferences(client),
+            initInstance(client, instanceURL),
+            initAccount(client, instanceURL, accessToken, vapidKey),
+          ]);
+          initStates();
+          window.__IGNORE_GET_ACCOUNT_ERROR__ = true;
 
-        setIsLoggedIn(true);
-        setUIState('default');
+          setIsLoggedIn(true);
+          setUIState('default');
+
+          // Redirect after successful login
+          const redirectPath = store.session.get('loginRedirect');
+          if (redirectPath) {
+            store.session.del('loginRedirect');
+            window.location.hash = redirectPath;
+          }
+        } else {
+          setUIState('error');
+        }
+        __BENCHMARK.end('app-init');
       })();
     } else {
       window.__IGNORE_GET_ACCOUNT_ERROR__ = true;
-      const account = getCurrentAccount();
+      const searchAccount = decodeURIComponent(
+        (window.location.search.match(/account=([^&]+)/) || [, ''])[1],
+      );
+      let account;
+      if (searchAccount) {
+        account = getAccount(searchAccount);
+        console.log('searchAccount', searchAccount, account);
+        if (account) {
+          setCurrentAccountID(account.info.id);
+          window.history.replaceState(
+            {},
+            document.title,
+            window.location.pathname || '/',
+          );
+        }
+      }
+      if (!account) {
+        account = getCurrentAccount();
+      }
       if (account) {
         setCurrentAccountID(account.info.id);
         const { client } = api({ account });
@@ -351,18 +522,33 @@ function App() {
         setUIState('loading');
         (async () => {
           try {
-            await initPreferences(client);
-            await initInstance(client, instance);
+            if (hasPreferences() && hasInstance(instance)) {
+              // Non-blocking
+              initPreferences(client);
+              initInstance(client, instance);
+            } else {
+              await Promise.allSettled([
+                initPreferences(client),
+                initInstance(client, instance),
+              ]);
+            }
           } catch (e) {
           } finally {
             setIsLoggedIn(true);
             setUIState('default');
+            __BENCHMARK.end('app-init');
           }
         })();
       } else {
         setUIState('default');
+        __BENCHMARK.end('app-init');
       }
     }
+
+    // Cleanup
+    store.sessionCookie.del('clientID');
+    store.sessionCookie.del('clientSecret');
+    store.sessionCookie.del('codeVerifier');
   }, []);
 
   let location = useLocation();
@@ -373,61 +559,162 @@ function App() {
 
   useEffect(focusDeck, [location, isLoggedIn]);
 
+  // Save last page for PWA restoration
+  const restoredRef = useRef(false);
+  const lastPathKey = 'pwaLastPath';
+  useEffect(() => {
+    if (!restoredRef.current) return;
+    // console.log('location.pathname', location.pathname);
+    if (isPWA && isLoggedIn) {
+      if (isRootPath(location.pathname)) {
+        store.local.del(lastPathKey);
+      } else {
+        store.local.setJSON(lastPathKey, {
+          path: location.pathname + location.search,
+          lastAccessed: Date.now(),
+        });
+      }
+    }
+  }, [location.pathname, location.search, isLoggedIn]);
+
+  // Restore last page on PWA reopen
+  useEffect(() => {
+    if (restoredRef.current) return;
+    const isRootPath = !location.pathname || location.pathname === '/';
+    if (!isRootPath) return;
+    if (isPWA && isLoggedIn && uiState === 'default') {
+      const lastPath = store.local.getJSON(lastPathKey);
+      if (lastPath) {
+        setTimeout(() => {
+          if (lastPath?.path) {
+            const timeSinceLastAccess =
+              Date.now() - (lastPath.lastAccessed || 0);
+            if (timeSinceLastAccess < PATH_RESTORE_TIME_LIMIT) {
+              window.location.hash = lastPath.path;
+            }
+          }
+          store.local.del(lastPathKey);
+        }, 300);
+      }
+      restoredRef.current = true;
+    }
+  }, [uiState, isLoggedIn]);
+
+  // Signal to service worker that this client is ready to receive share data
+  useEffect(() => {
+    if (
+      'serviceWorker' in navigator &&
+      (isPWA || import.meta.env.DEV) &&
+      uiState === 'default'
+    ) {
+      navigator.serviceWorker
+        .getRegistration()
+        .then(function (registration) {
+          console.log('💪 Got SW registration', registration);
+          if (registration && registration.active) {
+            console.log('💪 Sending client-ready message to SW');
+            registration.active.postMessage({ type: 'client-ready' });
+          }
+        })
+        .catch(function (err) {
+          console.error('Could not get registration', err);
+        });
+    }
+  }, [isPWA, uiState]);
+
   if (/\/https?:/.test(location.pathname)) {
     return <HttpRoute />;
   }
 
+  if (uiState === 'loading') {
+    return <Loader id="loader-root" />;
+  }
+
   return (
-    <>
-      <PrimaryRoutes isLoggedIn={isLoggedIn} loading={uiState === 'loading'} />
-      <SecondaryRoutes isLoggedIn={isLoggedIn} />
-      {uiState === 'default' && (
-        <Routes>
-          <Route path="/:instance?/s/:id" element={<StatusRoute />} />
-        </Routes>
-      )}
+    <AuthProvider value={isLoggedIn}>
+      <PrimaryRoutes />
+      <SecondaryRoutes />
+      <Routes>
+        <Route path="/:instance?/s/:id" element={<StatusRoute />} />
+      </Routes>
       {isLoggedIn && <ComposeButton />}
       {isLoggedIn && <Shortcuts />}
       <Modals />
       {isLoggedIn && <NotificationService />}
-      <BackgroundService isLoggedIn={isLoggedIn} />
-      {uiState !== 'loading' && <SearchCommand onClose={focusDeck} />}
+      <BackgroundService />
+      {isLoggedIn && <NavigationCommand />}
+      <SearchCommand onClose={focusDeck} />
       <KeyboardShortcutsHelp />
-    </>
+    </AuthProvider>
   );
 }
 
-function PrimaryRoutes({ isLoggedIn, loading }) {
+function Root() {
+  const isLoggedIn = useAuth();
+  if (isLoggedIn) {
+    __BENCHMARK.end('time-to-isLoggedIn');
+  }
+  return isLoggedIn ? <Home /> : <Welcome />;
+}
+
+function isRootPath(pathname) {
+  return /^\/(login|welcome|_sandbox|_qr-scan|_mock)/i.test(pathname);
+}
+
+const PrimaryRoutes = memo(() => {
   const location = useLocation();
   const nonRootLocation = useMemo(() => {
     const { pathname } = location;
-    return !/^\/(login|welcome)/i.test(pathname);
+    return !isRootPath(pathname);
   }, [location]);
 
   return (
     <Routes location={nonRootLocation || location}>
-      <Route
-        path="/"
-        element={
-          isLoggedIn ? (
-            <Home />
-          ) : loading ? (
-            <Loader id="loader-root" />
-          ) : (
-            <Welcome />
-          )
-        }
-      />
+      <Route path="/" element={<Root />} />
       <Route path="/login" element={<Login />} />
       <Route path="/welcome" element={<Welcome />} />
+      <Route
+        path="/_mock/home"
+        element={
+          <Suspense>
+            <MockHome />
+          </Suspense>
+        }
+      />
+      {(import.meta.env.DEV || import.meta.env.PHANPY_DEV) && (
+        <>
+          <Route
+            path="/_sandbox"
+            element={
+              <Suspense fallback={<Loader id="loader-sandbox" />}>
+                <Sandbox />
+              </Suspense>
+            }
+          />
+          <Route path="/_qr-scan" element={<QrScanTest />} />
+        </>
+      )}
     </Routes>
   );
+});
+
+// Auth route wrapper that redirects to login if not authenticated
+function AuthRoute({ children }) {
+  const isLoggedIn = useAuth();
+  const location = useLocation();
+
+  if (!isLoggedIn) {
+    const redirectPath = location.pathname + location.search;
+    store.session.set('loginRedirect', redirectPath);
+    return <Navigate to="/login" replace />;
+  }
+  return children;
 }
 
 function getPrevLocation() {
   return states.prevLocation || null;
 }
-function SecondaryRoutes({ isLoggedIn }) {
+function SecondaryRoutes() {
   // const snapStates = useSnapshot(states);
   const location = useLocation();
   // const prevLocation = snapStates.prevLocation;
@@ -439,6 +726,25 @@ function SecondaryRoutes({ isLoggedIn }) {
       matchPath('/s/:id', location.pathname)
     );
   }, [location.pathname, matchPath]);
+
+  // Persist prevLocation to sessionStorage while on a status/post page so it
+  // survives a page reload. Clear it when navigating away.
+  useEffect(() => {
+    if (isModalPage) {
+      if (states.prevLocation) {
+        store.session.setJSON('prevLocation', {
+          pathname: states.prevLocation.pathname,
+          search: states.prevLocation.search,
+        });
+      }
+    } else {
+      if (states.prevLocation) {
+        states.prevLocation = null;
+      }
+      store.session.del('prevLocation');
+    }
+  }, [isModalPage]);
+
   if (isModalPage) {
     if (!backgroundLocation.current)
       backgroundLocation.current = getPrevLocation();
@@ -452,22 +758,125 @@ function SecondaryRoutes({ isLoggedIn }) {
 
   return (
     <Routes location={backgroundLocation.current || location}>
-      {isLoggedIn && (
-        <>
-          <Route path="/notifications" element={<Notifications />} />
-          <Route path="/mentions" element={<Mentions />} />
-          <Route path="/following" element={<Following />} />
-          <Route path="/b" element={<Bookmarks />} />
-          <Route path="/f" element={<Favourites />} />
-          <Route path="/l">
-            <Route index element={<Lists />} />
-            <Route path=":id" element={<List />} />
-          </Route>
-          <Route path="/fh" element={<FollowedHashtags />} />
-          <Route path="/ft" element={<Filters />} />
-          <Route path="/catchup" element={<Catchup />} />
-        </>
-      )}
+      <Route
+        path="/notifications"
+        element={
+          <AuthRoute>
+            <Notifications />
+          </AuthRoute>
+        }
+      />
+      <Route
+        path="/mentions"
+        element={
+          <AuthRoute>
+            <Mentions />
+          </AuthRoute>
+        }
+      />
+      <Route
+        path="/following"
+        element={
+          <AuthRoute>
+            <Following />
+          </AuthRoute>
+        }
+      />
+      <Route
+        path="/b"
+        element={
+          <AuthRoute>
+            <Bookmarks />
+          </AuthRoute>
+        }
+      />
+      <Route
+        path="/f"
+        element={
+          <AuthRoute>
+            <Favourites />
+          </AuthRoute>
+        }
+      />
+      <Route path="/l">
+        <Route
+          index
+          element={
+            <AuthRoute>
+              <Lists />
+            </AuthRoute>
+          }
+        />
+        <Route
+          path=":id"
+          element={
+            <AuthRoute>
+              <List />
+            </AuthRoute>
+          }
+        />
+      </Route>
+      <Route
+        path="/fh"
+        element={
+          <AuthRoute>
+            <FollowedHashtags />
+          </AuthRoute>
+        }
+      />
+      <Route
+        path="/sp"
+        element={
+          <AuthRoute>
+            <ScheduledPosts />
+          </AuthRoute>
+        }
+      />
+      <Route
+        path="/ft"
+        element={
+          <AuthRoute>
+            <Filters />
+          </AuthRoute>
+        }
+      />
+      <Route
+        path="/catchup"
+        element={
+          <AuthRoute>
+            <Catchup />
+          </AuthRoute>
+        }
+      />
+      <Route
+        path="/yip"
+        element={
+          <AuthRoute>
+            <Suspense
+              fallback={
+                <div
+                  id="year-in-posts-page"
+                  class="deck-container"
+                  tabIndex="-1"
+                >
+                  {/* Prevent flash of no background as this is lazy-loaded */}
+                  <Loader />
+                </div>
+              }
+            >
+              <YearInPosts />
+            </Suspense>
+          </AuthRoute>
+        }
+      />
+      <Route
+        path="/annual_report/:year"
+        element={
+          <AuthRoute>
+            <AnnualReport />
+          </AuthRoute>
+        }
+      />
       <Route path="/:instance?/t/:hashtag" element={<Hashtag />} />
       <Route path="/:instance?/a/:id" element={<AccountStatuses />} />
       <Route path="/:instance?/p">

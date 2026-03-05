@@ -1,3 +1,44 @@
+#notifications-page {
+  .notification {
+    content-visibility: auto;
+  }
+
+  .timeline-header {
+    position: sticky;
+    --mask-padding: 8px;
+    top: calc(48px - var(--mask-padding));
+    transition: top 0.5s ease-in-out;
+    header[hidden] ~ & {
+      top: calc(-1 * var(--mask-padding));
+    }
+    z-index: 1;
+    background-color: inherit;
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 var(--mask-padding) calc(100% - var(--mask-padding) * 2),
+      transparent
+    );
+
+    @media (min-width: 40em) {
+      background-color: var(--bg-faded-color);
+    }
+    padding-block: 16px;
+    margin: 0;
+    opacity: 1;
+
+    #columns & {
+      position: static;
+      background-color: inherit;
+    }
+
+    small {
+      font-weight: normal;
+      font-size: var(--text-size);
+    }
+  }
+}
+
 .notification {
   display: flex;
   padding: 16px !important;
@@ -10,8 +51,12 @@
     cursor: pointer;
   }
 }
-.notification.notification-mention {
-  margin-top: 16px;
+.notification-type:is(
+    .notification-mention,
+    .notification-quote,
+    .notification-mention\+quote
+  ) {
+  padding-top: 16px;
 }
 .only-mentions .notification:not(.notification-mention),
 .only-mentions .timeline-empty {
@@ -37,6 +82,9 @@
 .notification-type.notification-reblog {
   color: var(--reblog-color);
 }
+.notification-type.notification-quote {
+  color: var(--quote-color);
+}
 .notification-type.notification-poll {
   color: var(--link-color);
 }
@@ -46,6 +94,12 @@
 }
 .notification .favourite-icon {
   color: var(--favourite-color);
+}
+.notification .mention-icon {
+  color: var(--reply-to-color);
+}
+.notification .quote-icon {
+  color: var(--quote-color);
 }
 
 .notification .account-avatar-stack {
@@ -97,10 +151,22 @@
   overflow: hidden;
   filter: saturate(0.25);
 }
-.notification .status-link:not(.status-type-mention) > .status {
+.notification
+  .status-link:not(
+    .status-type-mention,
+    .status-type-quote,
+    .status-type-mention\+quote
+  )
+  > .status {
   font-size: calc(var(--text-size) * 0.9);
 }
-.notification .status-link.truncated:not(.status-type-mention) > .status {
+.notification
+  .status-link.truncated:not(
+    .status-type-mention,
+    .status-type-quote,
+    .status-type-mention\+quote
+  )
+  > .status {
   /* fade out mask gradient bottom */
   mask-image: linear-gradient(
     rgba(0, 0, 0, 1) 130px,
@@ -122,8 +188,11 @@
   color: var(--text-color);
   background-color: var(--bg-faded-color);
   border: 1px dashed var(--link-color);
-  box-shadow: 0 0 0 1px var(--bg-color), 0 -5px 10px var(--bg-color),
-    0 -5px 15px var(--bg-color), 0 -5px 20px var(--bg-color);
+  box-shadow:
+    0 0 0 1px var(--bg-color),
+    0 -5px 10px var(--bg-color),
+    0 -5px 15px var(--bg-color),
+    0 -5px 20px var(--bg-color);
   padding: 0.5em 0.75em;
   border-radius: 10em;
   font-size: 90%;
@@ -139,9 +208,29 @@
   max-height: 320px;
   filter: none;
   background-color: var(--bg-color);
-  margin-top: calc(-16px - 1px);
   border-color: var(--reply-to-color);
   box-shadow: 0 0 0 3px var(--reply-to-faded-color);
+}
+.notification .status-link.status-type-quote {
+  max-height: 320px;
+  filter: none;
+  background-color: var(--bg-color);
+  border-color: var(--quote-color);
+  box-shadow: 0 0 0 3px var(--quote-faded-color);
+}
+.notification .status-link.status-type-mention\+quote {
+  max-height: 320px;
+  filter: none;
+  background-color: var(--bg-color);
+  border-color: transparent;
+  background-image:
+    linear-gradient(var(--bg-color), var(--bg-color)),
+    linear-gradient(135deg in oklch, var(--reply-to-color), var(--quote-color));
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  box-shadow:
+    1.5px 1.5px 0 1.5px var(--quote-faded-color),
+    -1.5px -1.5px 0 1.5px var(--reply-to-faded-color);
 }
 .notification:focus-visible .status-link,
 .notification .status-link:is(:hover, :focus) {
@@ -152,6 +241,16 @@
 .notification .status-link.status-type-mention:is(:hover, :focus) {
   border-color: var(--reply-to-color);
   box-shadow: 0 0 5px var(--reply-to-color);
+}
+.notification .status-link.status-type-quote:is(:hover, :focus) {
+  border-color: var(--quote-color);
+  box-shadow: 0 0 5px var(--quote-color);
+}
+.notification .status-link.status-type-mention\+quote:is(:hover, :focus) {
+  border-color: transparent;
+  box-shadow:
+    2.5px 2.5px 5px -2.5px var(--quote-color),
+    -2.5px -2.5px 5px -2.5px var(--reply-to-color);
 }
 .notification .status-link:active {
   filter: brightness(0.95);
@@ -203,26 +302,31 @@
 }
 
 #mentions-option {
+  position: relative;
+  z-index: 2;
   float: right;
   &:dir(rtl) {
     float: left;
   }
-  margin-top: 0.5em;
+  margin: 16px 8px 0 0;
 }
 #mentions-option label {
   color: var(--text-insignificant-color);
   display: inline-block;
-  padding: 1em 16px;
+  padding: 8px;
   position: relative;
   cursor: pointer;
   z-index: 1;
   font-size: 90%;
   background-color: var(--bg-blur-color);
-  border-radius: 2em;
+  border-radius: 8px;
 }
 #mentions-option label:has(:checked) {
   color: var(--text-color);
   background-color: var(--bg-color);
+}
+#mentions-option .button {
+  background-color: var(--bg-blur-color);
 }
 
 /* FOLLOW REQUESTS */
@@ -519,6 +623,11 @@
         display: flex;
         align-items: center;
         gap: 4px;
+
+        small {
+          flex: 1;
+          min-width: 0;
+        }
       }
     }
 
@@ -560,9 +669,26 @@
     display: flex;
     gap: 8px;
     align-items: center;
+    justify-content: space-between;
 
     input[type='checkbox'] {
       flex-shrink: 0;
+    }
+  }
+
+  .notification-policy-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    select:has(option[value='accept']:checked) {
+      box-shadow: 0 0 0 2px var(--green-color);
+    }
+    select:has(option[value='filter']:checked) {
+      box-shadow: 0 0 0 2px var(--orange-color);
+    }
+    select:has(option[value='drop']:checked) {
+      box-shadow: 0 0 0 2px var(--red-color);
     }
   }
 }

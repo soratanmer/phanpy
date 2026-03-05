@@ -7,7 +7,15 @@ var _rollbarConfig = {
   hostSafeList: ['dev.phanpy.social', 'phanpy.social'],
   payload: {
     environment: isDev ? 'development' : 'production',
+    client: {
+      javascript: {
+        source_map_enabled: true,
+        code_version: __PHANPY_COMMIT_HASH__,
+      },
+    },
   },
+  captureIp: false,
+  scrubTelemetryInputs: true,
 };
 
 // Rollbar Snippet
@@ -72,7 +80,7 @@ var _rollbarConfig = {
     (_rollbarConfig = _rollbarConfig || {}),
       (_rollbarConfig.rollbarJsUrl =
         _rollbarConfig.rollbarJsUrl ||
-        'https://cdn.rollbar.com/rollbarjs/refs/tags/v2.26.0/rollbar.min.js'),
+        'https://cdn.rollbar.com/rollbarjs/refs/tags/v2.26.4/rollbar.min.js'),
       (_rollbarConfig.async =
         void 0 === _rollbarConfig.async || _rollbarConfig.async);
     var a = n.setupShim(window, _rollbarConfig),
@@ -328,7 +336,6 @@ var _rollbarConfig = {
         for (
           var a = e.removeEventListener;
           a._rollbarOldRemove && a.belongsToShim;
-
         )
           a = a._rollbarOldRemove;
         var l = function (r, e, o) {
@@ -405,7 +412,6 @@ var _rollbarConfig = {
               },
               i = 0;
             (o = window._rollbarShims[i++]);
-
           )
             n || (n = o.handler),
               o.handler._swapAndProcessMessages(l, o.messages);

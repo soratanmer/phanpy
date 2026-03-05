@@ -1,8 +1,16 @@
 import './notifications.css';
 
+import { msg } from '@lingui/core/macro';
+import { Plural, Trans, useLingui } from '@lingui/react/macro';
 import { Fragment } from 'preact';
 import { memo } from 'preact/compat';
-import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'preact/hooks';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { InView } from 'react-intersection-observer';
 import { useSearchParams } from 'react-router-dom';
@@ -20,6 +28,7 @@ import Notification from '../components/notification';
 import Status from '../components/status';
 import { api } from '../utils/api';
 import enhanceContent from '../utils/enhance-content';
+import FilterContext from '../utils/filter-context';
 import groupNotifications, {
   groupNotifications2,
   massageNotifications2,
@@ -31,7 +40,8 @@ import { getRegistration } from '../utils/push-notifications';
 import shortenNumber from '../utils/shorten-number';
 import showToast from '../utils/show-toast';
 import states, { saveStatus } from '../utils/states';
-import { getCurrentInstance } from '../utils/store-utils';
+import store from '../utils/store';
+import { getAPIVersions, getCurrentInstance } from '../utils/store-utils';
 import supports from '../utils/supports';
 import usePageVisibility from '../utils/usePageVisibility';
 import useScroll from '../utils/useScroll';
@@ -42,26 +52,23 @@ const NOTIFICATIONS_GROUPED_LIMIT = 20;
 const emptySearchParams = new URLSearchParams();
 
 const scrollIntoViewOptions = {
-  block: 'center',
+  block: 'start',
   inline: 'center',
-  behavior: 'smooth',
+  behavior: 'instant',
 };
 
 const memSupportsGroupedNotifications = mem(
-  () => supports('@mastodon/grouped-notifications'),
+  () => getAPIVersions()?.mastodon >= 2,
   {
-    maxAge: 1000 * 60 * 5, // 5 minutes
+    expires: 1000 * 60 * 5, // 5 minutes
   },
 );
 
-export function mastoFetchNotifications(opts = {}) {
+function mastoFetchNotificationsIterable(opts = {}) {
   const { masto } = api();
-  if (
-    states.settings.groupedNotificationsAlpha &&
-    memSupportsGroupedNotifications()
-  ) {
+  if (memSupportsGroupedNotifications()) {
     // https://github.com/mastodon/mastodon/pull/29889
-    return masto.v2_alpha.notifications.list({
+    return masto.v2.notifications.list({
       limit: NOTIFICATIONS_GROUPED_LIMIT,
       ...opts,
     });
@@ -72,20 +79,36 @@ export function mastoFetchNotifications(opts = {}) {
     });
   }
 }
+export function mastoFetchNotifications(opts = {}) {
+  return mastoFetchNotificationsIterable(opts).values();
+}
 
 export function getGroupedNotifications(notifications) {
-  if (
-    states.settings.groupedNotificationsAlpha &&
-    memSupportsGroupedNotifications()
-  ) {
+  if (memSupportsGroupedNotifications()) {
     return groupNotifications2(notifications);
   } else {
     return groupNotifications(notifications);
   }
 }
 
+const NOTIFICATIONS_POLICIES = [
+  'forNotFollowing',
+  'forNotFollowers',
+  'forNewAccounts',
+  'forPrivateMentions',
+  'forLimitedAccounts',
+];
+const NOTIFICATIONS_POLICIES_TEXT = {
+  forNotFollowing: msg`You don't follow`,
+  forNotFollowers: msg`Who don't follow you`,
+  forNewAccounts: msg`With a new account`,
+  forPrivateMentions: msg`Who unsolicitedly private mention you`,
+  forLimitedAccounts: msg`Who are limited by server moderators`,
+};
+
 function Notifications({ columnMode }) {
-  useTitle('Notifications', '/notifications');
+  const { _, t } = useLingui();
+  useTitle(t`Notifications`, '/notifications');
   const { masto, instance } = api();
   const snapStates = useSnapshot(states);
   const [uiState, setUIState] = useState('default');
@@ -94,6 +117,8 @@ function Notifications({ columnMode }) {
   const notificationAccessToken = searchParams.get('access_token');
   const [showMore, setShowMore] = useState(false);
   const [onlyMentions, setOnlyMentions] = useState(false);
+  const [showMentionsLink, setShowMentionsLink] = useState(false);
+  const [hasAnalyzedFirstLoad, setHasAnalyzedFirstLoad] = useState(false);
   const scrollableRef = useRef();
   const { nearReachEnd, scrollDirection, reachStart, nearReachStart } =
     useScroll({
@@ -105,13 +130,15 @@ function Notifications({ columnMode }) {
 
   console.debug('RENDER Notifications');
 
+  const notificationsIterable = useRef();
   const notificationsIterator = useRef();
   async function fetchNotifications(firstLoad) {
     if (firstLoad || !notificationsIterator.current) {
       // Reset iterator
-      notificationsIterator.current = mastoFetchNotifications({
+      notificationsIterable.current = mastoFetchNotificationsIterable({
         excludeTypes: ['follow_request'],
       });
+      notificationsIterator.current = notificationsIterable.current.values();
     }
     if (/max_id=($|&)/i.test(notificationsIterator.current?.nextParams)) {
       // Pixelfed returns next paginationed link with empty max_id
@@ -170,6 +197,8 @@ function Notifications({ columnMode }) {
             },
           })
           .catch(() => {});
+
+        analyzeNotifications(groupedNotifications);
       } else {
         states.notifications.push(...groupedNotifications);
       }
@@ -221,7 +250,7 @@ function Notifications({ columnMode }) {
     useState(false);
   const [notificationsPolicy, setNotificationsPolicy] = useState({});
   function fetchNotificationsPolicy() {
-    return masto.v1.notifications.policy.fetch().catch(() => {});
+    return masto.v2.notifications.policy.fetch().catch(() => {});
   }
   function loadNotificationsPolicy() {
     fetchNotificationsPolicy()
@@ -236,6 +265,84 @@ function Notifications({ columnMode }) {
     return masto.v1.notifications.requests.list();
   }
 
+  const analyzeNotifications = (notifications) => {
+    // Once Mentions link is shown, don't need to analyze again
+    if (showMentionsLink) return;
+
+    const totalNotifications = notifications.length;
+    const totalActualNotifications = notifications.reduce(
+      (sum, n) => sum + (n.notificationsCount || 1),
+      0,
+    );
+    const totalMentions = notifications.filter(
+      (n) => n.type === 'mention',
+    ).length;
+    const mentionsCountPerDay = {};
+    const notificationCountPerDay = {};
+    notifications.forEach((n) => {
+      const { createdAt, notificationsCount, type } = n;
+      const date = new Date(createdAt).toDateString();
+      notificationCountPerDay[date] =
+        (notificationCountPerDay[date] || 0) + (notificationsCount || 1);
+      if (type === 'mention') {
+        mentionsCountPerDay[date] = (mentionsCountPerDay[date] || 0) + 1;
+      }
+    });
+    const mentionsPercentage =
+      totalNotifications > 0 ? totalMentions / totalNotifications : 0;
+    // Show mentions link if:
+    // - < 33% mentions OR
+    const littleMentions = mentionsPercentage < 0.33;
+    // - > 30 mentions in a day
+    const tooManyMentionsPerDay = Object.values(mentionsCountPerDay).some(
+      (count) => count > 30,
+    );
+    // - > 30 on any grouped notification (notificationCount > 30)
+    const tooManyNotificationsPerGroupNotification = notifications.some(
+      (n) => n.notificationsCount > 30,
+    );
+    // - > 30 notifications per hour
+    const notificationCountPerHour = {};
+    let tooManyNotificationsPerHour = false;
+    for (const n of notifications) {
+      const { createdAt, notificationsCount } = n;
+      const date = new Date(createdAt);
+      const hourKey = date.toISOString().slice(0, 13); // YYYY-MM-DDTHH
+      notificationCountPerHour[hourKey] =
+        (notificationCountPerHour[hourKey] || 0) + (notificationsCount || 1);
+      if (notificationCountPerHour[hourKey] > 30) {
+        tooManyNotificationsPerHour = true;
+        break;
+      }
+    }
+    setShowMentionsLink(
+      littleMentions ||
+        tooManyMentionsPerDay ||
+        tooManyNotificationsPerGroupNotification ||
+        tooManyNotificationsPerHour,
+    );
+    setHasAnalyzedFirstLoad(Date.now());
+
+    // [DEBUG]
+    console.log(
+      '🔔 Notifications analysis:',
+      {
+        totalNotifications,
+        totalActualNotifications,
+        totalMentions,
+        notificationCountPerDay,
+        notificationCountPerHour,
+        mentionsPercentage,
+      },
+      {
+        littleMentions,
+        tooManyMentionsPerDay,
+        tooManyNotificationsPerGroupNotification,
+        tooManyNotificationsPerHour,
+      },
+    );
+  };
+
   const loadNotifications = (firstLoad) => {
     setShowNew(false);
     setUIState('loading');
@@ -248,9 +355,10 @@ function Notifications({ columnMode }) {
             .then((announcements) => {
               announcements.sort((a, b) => {
                 // Sort by updatedAt first, then createdAt
-                const aDate = new Date(a.updatedAt || a.createdAt);
-                const bDate = new Date(b.updatedAt || b.createdAt);
-                return bDate - aDate;
+                return (
+                  Date.parse(b.updatedAt || b.createdAt) -
+                  Date.parse(a.updatedAt || a.createdAt)
+                );
               });
               setAnnouncements(announcements);
             })
@@ -385,73 +493,146 @@ function Notifications({ columnMode }) {
   //   }
   // }, [uiState]);
 
+  const [annualReportNotification, setAnnualReportNotification] =
+    useState(null);
+  useEffect(async () => {
+    // Skip this if not in December
+    const date = new Date();
+    if (date.getMonth() !== 11) return;
+    const dateYear = date.getFullYear();
+
+    // Skip if doesn't support annual report
+    if (!supports('@mastodon/annual-report')) return;
+
+    let annualReportNotification = store.account.get(
+      'annualReportNotification',
+    );
+    if (annualReportNotification) {
+      const annualReportYear = annualReportNotification?.annualReport?.year;
+      if (annualReportYear == dateYear) {
+        setAnnualReportNotification(annualReportNotification);
+        return;
+      }
+    }
+    const notificationIterator = mastoFetchNotifications({
+      types: ['annual_report'],
+    });
+    try {
+      const notification = await notificationIterator.next();
+      annualReportNotification = notification?.value?.notificationGroups?.[0];
+      const annualReportYear = annualReportNotification?.annualReport?.year;
+      // If same year, show the annual report
+      if (annualReportYear == dateYear) {
+        console.log(
+          'ANNUAL REPORT',
+          annualReportYear,
+          annualReportNotification,
+        );
+        setAnnualReportNotification(annualReportNotification);
+        store.account.set('annualReportNotification', annualReportNotification);
+      }
+    } catch (e) {
+      console.warn(e);
+    }
+  }, []);
+
   const itemsSelector = '.notification';
-  const jRef = useHotkeys('j', () => {
-    const activeItem = document.activeElement.closest(itemsSelector);
-    const activeItemRect = activeItem?.getBoundingClientRect();
-    const allItems = Array.from(
-      scrollableRef.current.querySelectorAll(itemsSelector),
-    );
-    if (
-      activeItem &&
-      activeItemRect.top < scrollableRef.current.clientHeight &&
-      activeItemRect.bottom > 0
-    ) {
-      const activeItemIndex = allItems.indexOf(activeItem);
-      let nextItem = allItems[activeItemIndex + 1];
-      if (nextItem) {
-        nextItem.focus();
-        nextItem.scrollIntoView(scrollIntoViewOptions);
+  const jRef = useHotkeys(
+    'j',
+    () => {
+      const activeItem = document.activeElement.closest(itemsSelector);
+      const activeItemRect = activeItem?.getBoundingClientRect();
+      const allItems = Array.from(
+        scrollableRef.current.querySelectorAll(itemsSelector),
+      );
+      if (
+        activeItem &&
+        activeItemRect.top < scrollableRef.current.clientHeight &&
+        activeItemRect.bottom > 0
+      ) {
+        const activeItemIndex = allItems.indexOf(activeItem);
+        let nextItem = allItems[activeItemIndex + 1];
+        if (nextItem) {
+          nextItem.focus();
+          nextItem.scrollIntoView(scrollIntoViewOptions);
+        }
+      } else {
+        const topmostItem = allItems.find((item) => {
+          const itemRect = item.getBoundingClientRect();
+          return itemRect.top >= 44 && itemRect.left >= 0;
+        });
+        if (topmostItem) {
+          topmostItem.focus();
+          topmostItem.scrollIntoView(scrollIntoViewOptions);
+        }
       }
-    } else {
-      const topmostItem = allItems.find((item) => {
-        const itemRect = item.getBoundingClientRect();
-        return itemRect.top >= 44 && itemRect.left >= 0;
-      });
-      if (topmostItem) {
-        topmostItem.focus();
-        topmostItem.scrollIntoView(scrollIntoViewOptions);
-      }
-    }
-  });
+    },
+    {
+      useKey: true,
+      ignoreEventWhen: (e) => e.metaKey || e.ctrlKey || e.altKey || e.shiftKey,
+    },
+  );
 
-  const kRef = useHotkeys('k', () => {
-    // focus on previous status after active item
-    const activeItem = document.activeElement.closest(itemsSelector);
-    const activeItemRect = activeItem?.getBoundingClientRect();
-    const allItems = Array.from(
-      scrollableRef.current.querySelectorAll(itemsSelector),
-    );
-    if (
-      activeItem &&
-      activeItemRect.top < scrollableRef.current.clientHeight &&
-      activeItemRect.bottom > 0
-    ) {
-      const activeItemIndex = allItems.indexOf(activeItem);
-      let prevItem = allItems[activeItemIndex - 1];
-      if (prevItem) {
-        prevItem.focus();
-        prevItem.scrollIntoView(scrollIntoViewOptions);
+  const kRef = useHotkeys(
+    'k',
+    () => {
+      // focus on previous status after active item
+      const activeItem = document.activeElement.closest(itemsSelector);
+      const activeItemRect = activeItem?.getBoundingClientRect();
+      const allItems = Array.from(
+        scrollableRef.current.querySelectorAll(itemsSelector),
+      );
+      if (
+        activeItem &&
+        activeItemRect.top < scrollableRef.current.clientHeight &&
+        activeItemRect.bottom > 0
+      ) {
+        const activeItemIndex = allItems.indexOf(activeItem);
+        let prevItem = allItems[activeItemIndex - 1];
+        if (prevItem) {
+          prevItem.focus();
+          prevItem.scrollIntoView(scrollIntoViewOptions);
+        }
+      } else {
+        const topmostItem = allItems.find((item) => {
+          const itemRect = item.getBoundingClientRect();
+          return itemRect.top >= 44 && itemRect.left >= 0;
+        });
+        if (topmostItem) {
+          topmostItem.focus();
+          topmostItem.scrollIntoView(scrollIntoViewOptions);
+        }
       }
-    } else {
-      const topmostItem = allItems.find((item) => {
-        const itemRect = item.getBoundingClientRect();
-        return itemRect.top >= 44 && itemRect.left >= 0;
-      });
-      if (topmostItem) {
-        topmostItem.focus();
-        topmostItem.scrollIntoView(scrollIntoViewOptions);
-      }
-    }
-  });
+    },
+    {
+      useKey: true,
+      ignoreEventWhen: (e) => e.metaKey || e.ctrlKey || e.altKey || e.shiftKey,
+    },
+  );
 
-  const oRef = useHotkeys(['enter', 'o'], () => {
-    const activeItem = document.activeElement.closest(itemsSelector);
-    const statusLink = activeItem?.querySelector('.status-link');
-    if (statusLink) {
-      statusLink.click();
-    }
-  });
+  const oRef = useHotkeys(
+    ['enter', 'o'],
+    () => {
+      const activeItem = document.activeElement.closest(itemsSelector);
+      const statusLink = activeItem?.querySelector('.status-link');
+      if (statusLink) {
+        statusLink.click();
+      }
+    },
+    {
+      useKey: true,
+      ignoreEventWhen: (e) => e.metaKey || e.ctrlKey || e.altKey || e.shiftKey,
+    },
+  );
+
+  const today = new Date();
+  const todaySubHeading = useMemo(() => {
+    return niceDateTime(today, {
+      forceOpts: {
+        weekday: 'long',
+      },
+    });
+  }, [today]);
 
   return (
     <div
@@ -484,10 +665,12 @@ function Notifications({ columnMode }) {
             <div class="header-side">
               <NavMenu />
               <Link to="/" class="button plain">
-                <Icon icon="home" size="l" alt="Home" />
+                <Icon icon="home" size="l" alt={t`Home`} />
               </Link>
             </div>
-            <h1>Notifications</h1>
+            <h1>
+              <Trans>Notifications</Trans>
+            </h1>
             <div class="header-side">
               {supportsFilteredNotifications && (
                 <button
@@ -497,7 +680,11 @@ function Notifications({ columnMode }) {
                     setShowNotificationsSettings(true);
                   }}
                 >
-                  <Icon icon="settings" size="l" alt="Notifications settings" />
+                  <Icon
+                    icon="settings"
+                    size="l"
+                    alt={t`Notifications settings`}
+                  />
                 </button>
               )}
             </div>
@@ -514,7 +701,7 @@ function Notifications({ columnMode }) {
                 });
               }}
             >
-              <Icon icon="arrow-up" /> New notifications
+              <Icon icon="arrow-up" /> <Trans>New notifications</Trans>
             </button>
           )}
         </header>
@@ -525,7 +712,11 @@ function Notifications({ columnMode }) {
                 <summary>
                   <span>
                     <Icon icon="announce" class="announcement-icon" size="l" />{' '}
-                    <b>Announcement{announcements.length > 1 ? 's' : ''}</b>{' '}
+                    <Plural
+                      value={announcements.length}
+                      one="Announcement"
+                      other="Announcements"
+                    />{' '}
                     <small class="insignificant">{instance}</small>
                   </span>
                   {announcements.length > 1 && (
@@ -567,10 +758,18 @@ function Notifications({ columnMode }) {
         )}
         {followRequests.length > 0 && (
           <div class="follow-requests">
-            <h2 class="timeline-header">Follow requests</h2>
+            <h2 class="timeline-header">
+              <Trans>Follow requests</Trans>
+            </h2>
             {followRequests.length > 5 ? (
               <details>
-                <summary>{followRequests.length} follow requests</summary>
+                <summary>
+                  <Plural
+                    value={followRequests.length}
+                    one="# follow request"
+                    other="# follow requests"
+                  />
+                </summary>
                 <ul>
                   {followRequests.map((account) => (
                     <li key={account.id}>
@@ -620,8 +819,11 @@ function Notifications({ columnMode }) {
                     }}
                   >
                     <summary>
-                      Filtered notifications from{' '}
-                      {notificationsPolicy.summary.pendingRequestsCount} people
+                      <Plural
+                        value={notificationsPolicy.summary.pendingRequestsCount}
+                        one="Filtered notifications from # person"
+                        other="Filtered notifications from # people"
+                      />
                     </summary>
                     {!notificationsRequests ? (
                       <p class="ui-state">
@@ -674,26 +876,48 @@ function Notifications({ columnMode }) {
               </div>
             </div>
           )}
-        <div id="mentions-option">
-          <label>
-            <input
-              type="checkbox"
-              checked={onlyMentions}
-              onChange={(e) => {
-                setOnlyMentions(e.target.checked);
-              }}
-            />{' '}
-            Only mentions
-          </label>
-        </div>
-        <h2 class="timeline-header">Today</h2>
+        {annualReportNotification && (
+          <div class="shazam-container">
+            <div class="shazam-container-inner">
+              <Notification notification={annualReportNotification} />
+            </div>
+          </div>
+        )}
+        {!!hasAnalyzedFirstLoad && (
+          <div id="mentions-option">
+            {showMentionsLink ? (
+              <Link to="/mentions" class="button plain">
+                <Icon icon="at" />{' '}
+                <span>
+                  <Trans>Mentions</Trans>
+                </span>{' '}
+                <Icon icon="arrow-right" class="more-insignificant" />
+              </Link>
+            ) : (
+              <label>
+                <input
+                  type="checkbox"
+                  checked={onlyMentions}
+                  onChange={(e) => {
+                    setOnlyMentions(e.target.checked);
+                  }}
+                />{' '}
+                <Trans>Only mentions</Trans>
+              </label>
+            )}
+          </div>
+        )}
+        <h2 class="timeline-header">
+          <Trans>Today</Trans>{' '}
+          <small class="insignificant bidi-isolate">{todaySubHeading}</small>
+        </h2>
         {showTodayEmpty && (
           <p class="ui-state insignificant">
-            {uiState === 'default' ? "You're all caught up." : <>&hellip;</>}
+            {uiState === 'default' ? t`You're all caught up.` : <>&hellip;</>}
           </p>
         )}
         {snapStates.notifications.length ? (
-          <>
+          <FilterContext.Provider value="notifications">
             {snapStates.notifications
               // This is leaked from Notifications popover
               .filter((n) => n.type !== 'follow_request')
@@ -712,13 +936,25 @@ function Notifications({ columnMode }) {
                 const heading =
                   notificationDay.toDateString() ===
                   yesterdayDate.toDateString()
-                    ? 'Yesterday'
+                    ? t`Yesterday`
                     : niceDateTime(currentDay, {
                         hideTime: true,
                       });
+                const subHeading = niceDateTime(currentDay, {
+                  forceOpts: {
+                    weekday: 'long',
+                  },
+                });
                 return (
                   <Fragment key={notification._ids || notification.id}>
-                    {differentDay && <h2 class="timeline-header">{heading}</h2>}
+                    {differentDay && (
+                      <h2 class="timeline-header">
+                        <span>{heading}</span>{' '}
+                        <small class="insignificant bidi-isolate">
+                          {subHeading}
+                        </small>
+                      </h2>
+                    )}
                     <Notification
                       instance={instance}
                       notification={notification}
@@ -727,7 +963,7 @@ function Notifications({ columnMode }) {
                   </Fragment>
                 );
               })}
-          </>
+          </FilterContext.Provider>
         ) : (
           <>
             {uiState === 'loading' && (
@@ -748,11 +984,11 @@ function Notifications({ columnMode }) {
             )}
             {uiState === 'error' && (
               <p class="ui-state">
-                Unable to load notifications
+                <Trans>Unable to load notifications</Trans>
                 <br />
                 <br />
                 <button type="button" onClick={() => loadNotifications(true)}>
-                  Try again
+                  <Trans>Try again</Trans>
                 </button>
               </p>
             )}
@@ -776,7 +1012,7 @@ function Notifications({ columnMode }) {
               {uiState === 'loading' ? (
                 <Loader abrupt />
               ) : (
-                <>Show more&hellip;</>
+                <Trans>Show more…</Trans>
               )}
             </button>
           </InView>
@@ -796,89 +1032,74 @@ function Notifications({ columnMode }) {
               class="sheet-close"
               onClick={() => setShowNotificationsSettings(false)}
             >
-              <Icon icon="x" />
+              <Icon icon="x" alt={t`Close`} />
             </button>
             <header>
-              <h2>Notifications settings</h2>
+              <h2>
+                <Trans>Notifications settings</Trans>
+              </h2>
             </header>
             <main>
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
                   const {
-                    filterNotFollowing,
-                    filterNotFollowers,
-                    filterNewAccounts,
-                    filterPrivateMentions,
+                    forNotFollowing,
+                    forNotFollowers,
+                    forNewAccounts,
+                    forPrivateMentions,
+                    forLimitedAccounts,
                   } = e.target;
-                  const allFilters = {
-                    filterNotFollowing: filterNotFollowing.checked,
-                    filterNotFollowers: filterNotFollowers.checked,
-                    filterNewAccounts: filterNewAccounts.checked,
-                    filterPrivateMentions: filterPrivateMentions.checked,
-                  };
-                  setNotificationsPolicy({
+                  const newPolicy = {
                     ...notificationsPolicy,
-                    ...allFilters,
-                  });
+                    forNotFollowing: forNotFollowing.value,
+                    forNotFollowers: forNotFollowers.value,
+                    forNewAccounts: forNewAccounts.value,
+                    forPrivateMentions: forPrivateMentions.value,
+                    forLimitedAccounts: forLimitedAccounts.value,
+                  };
+                  setNotificationsPolicy(newPolicy);
                   setShowNotificationsSettings(false);
                   (async () => {
                     try {
-                      await masto.v1.notifications.policy.update(allFilters);
-                      showToast('Notifications settings updated');
+                      await masto.v2.notifications.policy.update(newPolicy);
+                      showToast(t`Notifications settings updated`);
                     } catch (e) {
                       console.error(e);
                     }
                   })();
                 }}
               >
-                <p>Filter out notifications from people:</p>
                 <p>
-                  <label>
-                    <input
-                      type="checkbox"
-                      switch
-                      defaultChecked={notificationsPolicy.filterNotFollowing}
-                      name="filterNotFollowing"
-                    />{' '}
-                    You don't follow
-                  </label>
+                  <Trans>Filter out notifications from people:</Trans>
                 </p>
+                <div class="notification-policy-fields">
+                  {NOTIFICATIONS_POLICIES.map((key) => {
+                    const value = notificationsPolicy[key];
+                    return (
+                      <div key={key}>
+                        <label>
+                          {_(NOTIFICATIONS_POLICIES_TEXT[key])}
+                          <select name={key} defaultValue={value} class="small">
+                            <option value="accept">
+                              <Trans>Accept</Trans>
+                            </option>
+                            <option value="filter">
+                              <Trans>Filter</Trans>
+                            </option>
+                            <option value="drop">
+                              <Trans>Ignore</Trans>
+                            </option>
+                          </select>
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
                 <p>
-                  <label>
-                    <input
-                      type="checkbox"
-                      switch
-                      defaultChecked={notificationsPolicy.filterNotFollowers}
-                      name="filterNotFollowers"
-                    />{' '}
-                    Who don't follow you
-                  </label>
-                </p>
-                <p>
-                  <label>
-                    <input
-                      type="checkbox"
-                      switch
-                      defaultChecked={notificationsPolicy.filterNewAccounts}
-                      name="filterNewAccounts"
-                    />{' '}
-                    With a new account
-                  </label>
-                </p>
-                <p>
-                  <label>
-                    <input
-                      type="checkbox"
-                      switch
-                      defaultChecked={notificationsPolicy.filterPrivateMentions}
-                      name="filterPrivateMentions"
-                    />{' '}
-                    Who unsolicitedly private mention you
-                  </label>
-                </p>
-                <p>
-                  <button type="submit">Save</button>
+                  <button type="submit">
+                    <Trans>Save</Trans>
+                  </button>
                 </p>
               </form>
             </main>
@@ -940,10 +1161,12 @@ function AnnouncementBlock({ announcement }) {
             {' '}
             &bull;{' '}
             <span class="ib">
-              Updated{' '}
-              <time datetime={updatedAtDate.toISOString()}>
-                {niceDateTime(updatedAtDate)}
-              </time>
+              <Trans>
+                Updated{' '}
+                <time datetime={updatedAtDate.toISOString()}>
+                  {niceDateTime(updatedAtDate)}
+                </time>
+              </Trans>
             </span>
           </>
         )}
@@ -1005,7 +1228,12 @@ function NotificationRequestModalButton({ request }) {
         }}
       >
         <Icon icon="notification" class="more-insignificant" />{' '}
-        <small>View notifications from @{account.username}</small>{' '}
+        <small>
+          <Trans>
+            View notifications from{' '}
+            <span class="bidi-isolate">@{account.username}</span>
+          </Trans>
+        </small>{' '}
         <Icon icon="chevron-down" />
       </button>
       {showModal && (
@@ -1018,10 +1246,15 @@ function NotificationRequestModalButton({ request }) {
         >
           <div class="sheet" tabIndex="-1">
             <button type="button" class="sheet-close" onClick={onClose}>
-              <Icon icon="x" />
+              <Icon icon="x" alt={t`Close`} />
             </button>
             <header>
-              <b>Notifications from @{account.username}</b>
+              <b>
+                <Trans>
+                  Notifications from{' '}
+                  <span class="bidi-isolate">@{account.username}</span>
+                </Trans>
+              </b>
             </header>
             <main>
               {uiState === 'loading' ? (
@@ -1060,6 +1293,7 @@ function NotificationRequestModalButton({ request }) {
 }
 
 function NotificationRequestButtons({ request, onChange }) {
+  const { t } = useLingui();
   const { masto } = api();
   const [uiState, setUIState] = useState('default');
   const [requestState, setRequestState] = useState(null); // accept, dismiss
@@ -1084,17 +1318,17 @@ function NotificationRequestButtons({ request, onChange }) {
                 state: 'accept',
               });
               showToast(
-                `Notifications from @${request.account.username} will not be filtered from now on.`,
+                t`Notifications from @${request.account.username} will not be filtered from now on.`,
               );
             } catch (error) {
               setUIState('error');
               console.error(error);
-              showToast(`Unable to accept notification request`);
+              showToast(t`Unable to accept notification request`);
             }
           })();
         }}
       >
-        Allow
+        <Trans>Allow</Trans>
       </button>{' '}
       <button
         type="button"
@@ -1114,17 +1348,17 @@ function NotificationRequestButtons({ request, onChange }) {
                 state: 'dismiss',
               });
               showToast(
-                `Notifications from @${request.account.username} will not show up in Filtered notifications from now on.`,
+                t`Notifications from @${request.account.username} will not show up in Filtered notifications from now on.`,
               );
             } catch (error) {
               setUIState('error');
               console.error(error);
-              showToast(`Unable to dismiss notification request`);
+              showToast(t`Unable to dismiss notification request`);
             }
           })();
         }}
       >
-        Dismiss
+        <Trans>Dismiss</Trans>
       </button>
       <span class="notification-request-states">
         {uiState === 'loading' ? (
@@ -1132,14 +1366,14 @@ function NotificationRequestButtons({ request, onChange }) {
         ) : requestState === 'accept' ? (
           <Icon
             icon="check-circle"
-            alt="Accepted"
+            alt={t`Accepted`}
             class="notification-accepted"
           />
         ) : (
           requestState === 'dismiss' && (
             <Icon
               icon="x-circle"
-              alt="Dismissed"
+              alt={t`Dismissed`}
               class="notification-dismissed"
             />
           )
