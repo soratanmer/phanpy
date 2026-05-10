@@ -11,6 +11,7 @@ import {
 } from 'preact/hooks';
 
 import getCustomEmojis from '../utils/custom-emojis';
+import NF from '../utils/nf';
 import store from '../utils/store';
 
 import Icon from './icon';
@@ -102,7 +103,7 @@ const CustomEmojisList = memo(({ emojis, onSelect }) => {
           class="plain small"
           onClick={() => setMax(max + CUSTOM_EMOJIS_COUNT)}
         >
-          <Trans>{i18n.number(emojis.length - max)} more…</Trans>
+          <Trans>{NF(i18n.locale).format(emojis.length - max)} more…</Trans>
         </button>
       )}
     </section>

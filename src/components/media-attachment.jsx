@@ -5,6 +5,7 @@ import { useDebouncedCallback } from 'use-debounce';
 
 import extractImageDescription from '../utils/extract-image-desc';
 import localeCode2Text from '../utils/localeCode2Text';
+import NF from '../utils/nf';
 import prettyBytes from '../utils/pretty-bytes';
 import showToast from '../utils/show-toast';
 import states from '../utils/states';
@@ -288,11 +289,13 @@ function MediaAttachment({
           width,
           height,
         );
-        return t`Dimension too large. Uploading might encounter issues. Try reduce dimension from ${i18n.number(
+        return t`Dimension too large. Uploading might encounter issues. Try reduce dimension from ${NF(
+          i18n.locale,
+        ).format(
           width,
-        )}×${i18n.number(height)}px to ${i18n.number(newWidth)}×${i18n.number(
-          newHeight,
-        )}px.`;
+        )}×${NF(i18n.locale).format(height)}px to ${NF(i18n.locale).format(newWidth)}×${NF(
+          i18n.locale,
+        ).format(newHeight)}px.`;
       }
       case 'videoSizeLimit': {
         const { videoSize, videoSizeLimit } = details;
@@ -308,11 +311,13 @@ function MediaAttachment({
           width,
           height,
         );
-        return t`Dimension too large. Uploading might encounter issues. Try reduce dimension from ${i18n.number(
+        return t`Dimension too large. Uploading might encounter issues. Try reduce dimension from ${NF(
+          i18n.locale,
+        ).format(
           width,
-        )}×${i18n.number(height)}px to ${i18n.number(newWidth)}×${i18n.number(
-          newHeight,
-        )}px.`;
+        )}×${NF(i18n.locale).format(height)}px to ${NF(i18n.locale).format(newWidth)}×${NF(
+          i18n.locale,
+        ).format(newHeight)}px.`;
       }
       case 'videoFrameRateLimit': {
         // Not possible to detect this on client-side for now
