@@ -2138,9 +2138,9 @@ function Status({
             onClose={(e) => {
               setIsContextMenuOpen(false);
               // statusRef.current?.focus?.();
-              if (e?.reason === 'click') {
-                statusRef.current?.closest('[tabindex]')?.focus?.();
-              }
+              // if (e?.reason === 'click') {
+              //   statusRef.current?.closest('[tabindex]')?.focus?.();
+              // }
             }}
             portal={{
               target: document.body,
