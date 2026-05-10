@@ -49,7 +49,7 @@
     "js-cookie": "~3.0.5",
     "just-debounce-it": "~3.2.0",
     "lz-string": "~1.5.0",
-    "masto": "~7.10.2",
+    "masto": "~7.11.1",
     "micro-memoize": "~5.1.1",
     "p-queue": "~9.1.2",
     "p-retry": "~8.0.0",

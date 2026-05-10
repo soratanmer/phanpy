@@ -918,11 +918,18 @@
 }
 
 #edit-profile-container {
+  background-color: var(--bg-faded-color);
+
+  header .loader-container {
+    margin: 0;
+  }
+
   p {
     margin-block: 8px;
   }
 
   label {
+    grapheme-input,
     input:not([type='file']),
     textarea {
       display: block;
@@ -931,13 +938,30 @@
 
     textarea {
       resize: vertical;
-      min-height: 5em;
+      min-height: 2em;
       max-height: 50vh;
     }
   }
 
-  .edit-profile-media-container {
-    margin-block: 8px;
+  fieldset {
+    margin: 16px 0;
+    background-color: var(--bg-color);
+    border: 0;
+    border-radius: 16px;
+    padding: 16px;
+
+    legend {
+      font-weight: 600;
+      display: block;
+      float: left;
+      margin: 0;
+      padding: 0 0 8px;
+      width: 100%;
+    }
+
+    .footer {
+      display: flex;
+    }
   }
 
   .edit-profile-media-field {
@@ -1000,6 +1024,7 @@
       width: 40%;
     }
 
+    grapheme-input,
     input {
       width: 100%;
     }

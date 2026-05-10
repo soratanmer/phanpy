@@ -1158,8 +1158,20 @@ function AccountInfo({
           <EditProfileSheet
             onClose={({ state, account } = {}) => {
               setShowEditProfile(false);
-              if (state === 'success' && account) {
-                onProfileUpdate(account);
+              if (state === 'success') {
+                if (account) {
+                  onProfileUpdate(account);
+                } else {
+                  (async () => {
+                    try {
+                      const updatedAccount =
+                        await masto.v1.accounts.verifyCredentials();
+                      onProfileUpdate(updatedAccount);
+                    } catch (e) {
+                      console.error(e);
+                    }
+                  })();
+                }
               }
             }}
           />
