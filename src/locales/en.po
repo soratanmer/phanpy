@@ -256,7 +256,7 @@ msgstr "Quotes"
 #: src/pages/catchup.jsx:76
 #: src/pages/catchup.jsx:1596
 #: src/pages/catchup.jsx:2261
-#: src/pages/settings.jsx:1303
+#: src/pages/settings.jsx:1351
 #: src/pages/year-in-posts.jsx:1406
 msgid "Boosts"
 msgstr ""
@@ -591,7 +591,7 @@ msgid "Public"
 msgstr ""
 
 #: src/components/compose.jsx:2043
-#: src/components/nav-menu.jsx:355
+#: src/components/nav-menu.jsx:358
 #: src/components/shortcuts-settings.jsx:168
 #: src/utils/visibility-text.jsx:5
 msgid "Local"
@@ -679,7 +679,7 @@ msgid "Custom emojis are not available on this server."
 msgstr "Custom emojis are not available on this server."
 
 #: src/components/drafts.jsx:62
-#: src/pages/settings.jsx:732
+#: src/pages/settings.jsx:780
 msgid "Unsent drafts"
 msgstr ""
 
@@ -1029,7 +1029,7 @@ msgid "<0>{key1}</0> then <1>{key2}</1>"
 msgstr "<0>{key1}</0> then <1>{key2}</1>"
 
 #: src/components/keyboard-shortcuts-help.jsx:57
-#: src/components/nav-menu.jsx:374
+#: src/components/nav-menu.jsx:380
 #: src/pages/catchup.jsx:1769
 msgid "Keyboard shortcuts"
 msgstr ""
@@ -1471,7 +1471,7 @@ msgstr ""
 #: src/pages/mentions.jsx:25
 #: src/pages/mentions.jsx:256
 #: src/pages/notifications.jsx:933
-#: src/pages/settings.jsx:1295
+#: src/pages/settings.jsx:1343
 #: src/pages/trending.jsx:384
 msgid "Mentions"
 msgstr ""
@@ -1517,7 +1517,7 @@ msgstr ""
 #: src/pages/catchup.jsx:2255
 #: src/pages/favourites.jsx:12
 #: src/pages/favourites.jsx:26
-#: src/pages/settings.jsx:1299
+#: src/pages/settings.jsx:1347
 msgid "Likes"
 msgstr ""
 
@@ -1563,29 +1563,29 @@ msgstr ""
 msgid "Log in"
 msgstr ""
 
-#: src/components/nav-menu.jsx:349
+#: src/components/nav-menu.jsx:350
 #: src/components/shortcuts-settings.jsx:59
 #: src/components/shortcuts-settings.jsx:175
 #: src/pages/trending.jsx:444
 msgid "Trending"
 msgstr ""
 
-#: src/components/nav-menu.jsx:361
+#: src/components/nav-menu.jsx:366
 #: src/components/shortcuts-settings.jsx:168
 msgid "Federated"
 msgstr ""
 
-#: src/components/nav-menu.jsx:384
+#: src/components/nav-menu.jsx:390
 msgid "Shortcuts / Columns…"
 msgstr ""
 
-#: src/components/nav-menu.jsx:394
-#: src/components/nav-menu.jsx:408
+#: src/components/nav-menu.jsx:400
+#: src/components/nav-menu.jsx:414
 msgid "Settings…"
 msgstr ""
 
-#: src/components/nav-menu.jsx:438
-#: src/components/nav-menu.jsx:473
+#: src/components/nav-menu.jsx:444
+#: src/components/nav-menu.jsx:479
 #: src/components/shortcuts-settings.jsx:52
 #: src/components/shortcuts-settings.jsx:161
 #: src/pages/list.jsx:127
@@ -1594,7 +1594,7 @@ msgstr ""
 msgid "Lists"
 msgstr ""
 
-#: src/components/nav-menu.jsx:446
+#: src/components/nav-menu.jsx:452
 #: src/components/shortcuts.jsx:32
 #: src/pages/list.jsx:139
 msgid "All Lists"
@@ -3048,7 +3048,7 @@ msgid "{index}/X"
 msgstr "{index}/X"
 
 #: src/components/timeline.jsx:555
-#: src/pages/settings.jsx:1323
+#: src/pages/settings.jsx:1371
 msgid "New posts"
 msgstr ""
 
@@ -3939,7 +3939,7 @@ msgid "{0, plural, one {Announcement} other {Announcements}}"
 msgstr ""
 
 #: src/pages/notifications.jsx:803
-#: src/pages/settings.jsx:1311
+#: src/pages/settings.jsx:1359
 msgid "Follow requests"
 msgstr ""
 
@@ -4214,199 +4214,215 @@ msgstr "Failed to update default visibility"
 msgid "Synced to your server's settings. <0>Go to your server ({instance}) for more settings.</0>"
 msgstr "Synced to your server's settings. <0>Go to your server ({instance}) for more settings.</0>"
 
-#: src/pages/settings.jsx:373
+#: src/pages/settings.jsx:375
+msgid "Wellbeing"
+msgstr "Wellbeing"
+
+#: src/pages/settings.jsx:388
+msgid "Hide Trending timeline"
+msgstr "Hide Trending timeline"
+
+#: src/pages/settings.jsx:400
+msgid "Hide Local timeline"
+msgstr "Hide Local timeline"
+
+#: src/pages/settings.jsx:413
+msgid "Hide Federated timeline"
+msgstr "Hide Federated timeline"
+
+#: src/pages/settings.jsx:421
 msgid "Experiments"
 msgstr ""
 
-#: src/pages/settings.jsx:386
+#: src/pages/settings.jsx:434
 msgid "Auto refresh timeline posts"
 msgstr ""
 
-#: src/pages/settings.jsx:398
+#: src/pages/settings.jsx:446
 msgid "Boosts carousel"
 msgstr ""
 
-#: src/pages/settings.jsx:415
+#: src/pages/settings.jsx:463
 msgid "Post translation"
 msgstr ""
 
-#: src/pages/settings.jsx:426
+#: src/pages/settings.jsx:474
 msgid "Translate to "
 msgstr "Translate to "
 
-#: src/pages/settings.jsx:437
+#: src/pages/settings.jsx:485
 msgid "System language ({systemTargetLanguageText})"
 msgstr ""
 
 #. placeholder {0}: snapStates.settings.contentTranslationHideLanguages .length
-#: src/pages/settings.jsx:463
+#: src/pages/settings.jsx:511
 msgid "{0, plural, =0 {Hide \"Translate\" button for:} other {Hide \"Translate\" button for (#):}}"
 msgstr ""
 
-#: src/pages/settings.jsx:518
+#: src/pages/settings.jsx:566
 msgid "Note: This feature uses external translation services, powered by <0>{TRANSLATION_API_NAME}</0>."
 msgstr "Note: This feature uses external translation services, powered by <0>{TRANSLATION_API_NAME}</0>."
 
-#: src/pages/settings.jsx:546
+#: src/pages/settings.jsx:594
 msgid "Auto inline translation"
 msgstr ""
 
-#: src/pages/settings.jsx:550
+#: src/pages/settings.jsx:598
 msgid "Automatically show translation for posts in timeline. Only works for <0>short</0> posts without content warning, media and poll."
 msgstr ""
 
-#: src/pages/settings.jsx:577
+#: src/pages/settings.jsx:625
 msgid "Paginated timeline (beta)"
 msgstr "Paginated timeline (beta)"
 
-#: src/pages/settings.jsx:581
+#: src/pages/settings.jsx:629
 msgid "Manual pagination of timeline posts instead of infinite scrolling. Only works for Home/Following timeline for now. Auto refresh and boosts carousel will not work when this is enabled."
 msgstr "Manual pagination of timeline posts instead of infinite scrolling. Only works for Home/Following timeline for now. Auto refresh and boosts carousel will not work when this is enabled."
 
-#: src/pages/settings.jsx:601
+#: src/pages/settings.jsx:649
 msgid "GIF Picker for composer"
 msgstr ""
 
-#: src/pages/settings.jsx:605
+#: src/pages/settings.jsx:653
 msgid "Note: This feature uses external GIF search service, powered by <0>GIPHY</0>. G-rated (suitable for viewing by all ages), tracking parameters are stripped, referrer information is omitted from requests, but search queries and IP address information will still reach their servers."
 msgstr ""
 
-#: src/pages/settings.jsx:634
+#: src/pages/settings.jsx:682
 msgid "Image description generator"
 msgstr ""
 
-#: src/pages/settings.jsx:639
+#: src/pages/settings.jsx:687
 msgid "Only for new images while composing new posts."
 msgstr ""
 
-#: src/pages/settings.jsx:646
+#: src/pages/settings.jsx:694
 msgid "Note: This feature uses external AI service, powered by <0>img-alt-api</0>. May not work well. Only for images and in English."
 msgstr ""
 
-#: src/pages/settings.jsx:674
+#: src/pages/settings.jsx:722
 msgid "\"Cloud\" import/export for shortcuts settings"
 msgstr ""
 
-#: src/pages/settings.jsx:679
+#: src/pages/settings.jsx:727
 msgid "⚠️⚠️⚠️ Very experimental.<0/>Stored in your own profile’s notes. Profile (private) notes are mainly used for other profiles, and hidden for own profile."
 msgstr ""
 
-#: src/pages/settings.jsx:690
+#: src/pages/settings.jsx:738
 msgid "Note: This feature uses currently-logged-in server API."
 msgstr "Note: This feature uses currently-logged-in server API."
 
-#: src/pages/settings.jsx:706
+#: src/pages/settings.jsx:754
 msgid "Cloak mode <0>(<1>Text</1> → <2>████</2>)</0>"
 msgstr ""
 
-#: src/pages/settings.jsx:715
+#: src/pages/settings.jsx:763
 msgid "Replace text as blocks, useful when taking screenshots, for privacy reasons."
 msgstr ""
 
-#: src/pages/settings.jsx:744
+#: src/pages/settings.jsx:792
 msgid "Install {CLIENT_NAME}"
 msgstr "Install {CLIENT_NAME}"
 
-#: src/pages/settings.jsx:752
+#: src/pages/settings.jsx:800
 msgid "About"
 msgstr ""
 
-#: src/pages/settings.jsx:791
+#: src/pages/settings.jsx:839
 msgid "<0>Built</0> by <1>@cheeaun</1>"
 msgstr ""
 
-#: src/pages/settings.jsx:820
+#: src/pages/settings.jsx:868
 msgid "Sponsor"
 msgstr ""
 
-#: src/pages/settings.jsx:828
+#: src/pages/settings.jsx:876
 msgid "Donate"
 msgstr "Donate"
 
-#: src/pages/settings.jsx:844
+#: src/pages/settings.jsx:892
 msgid "What's new"
 msgstr "What's new"
 
-#: src/pages/settings.jsx:848
+#: src/pages/settings.jsx:896
 msgid "Privacy Policy"
 msgstr ""
 
 #. placeholder {0}: WEBSITE.replace(/https?:\/\//g, '').replace(/\/$/, '')
-#: src/pages/settings.jsx:855
+#: src/pages/settings.jsx:903
 msgid "<0>Site:</0> {0}"
 msgstr ""
 
 #. placeholder {0}: !__FAKE_COMMIT_HASH__ && ( <span class="ib insignificant"> ( <a href={`https://github.com/cheeaun/phanpy/commit/${__COMMIT_HASH__}`} target="_blank" rel="noopener" > <RelativeTime datetime={new Date(__BUILD_TIME__)} /> </a> ) </span> )
-#: src/pages/settings.jsx:862
+#: src/pages/settings.jsx:910
 msgid "<0>Version:</0> <1/> {0}"
 msgstr ""
 
-#: src/pages/settings.jsx:877
+#: src/pages/settings.jsx:925
 msgid "Version string copied"
 msgstr ""
 
-#: src/pages/settings.jsx:880
+#: src/pages/settings.jsx:928
 msgid "Unable to copy version string"
 msgstr ""
 
 #. Preview of one character, in largest size
 #. Preview of one character, in smallest size
-#: src/pages/settings.jsx:1024
-#: src/pages/settings.jsx:1048
+#: src/pages/settings.jsx:1072
+#: src/pages/settings.jsx:1096
 msgid "A"
 msgstr ""
 
-#: src/pages/settings.jsx:1208
-#: src/pages/settings.jsx:1213
+#: src/pages/settings.jsx:1256
+#: src/pages/settings.jsx:1261
 msgid "Failed to update subscription. Please try again."
 msgstr ""
 
-#: src/pages/settings.jsx:1219
+#: src/pages/settings.jsx:1267
 msgid "Failed to remove subscription. Please try again."
 msgstr ""
 
-#: src/pages/settings.jsx:1226
+#: src/pages/settings.jsx:1274
 msgid "Push Notifications (beta)"
 msgstr ""
 
-#: src/pages/settings.jsx:1248
+#: src/pages/settings.jsx:1296
 msgid "Push notifications are blocked. Please enable them in your browser settings."
 msgstr ""
 
 #. placeholder {0}: [ { value: 'all', label: t`anyone`, }, { value: 'followed', label: t`people I follow`, }, { value: 'follower', label: t`followers`, }, ].map((type) => ( <option value={type.value}>{type.label}</option> ))
-#: src/pages/settings.jsx:1257
+#: src/pages/settings.jsx:1305
 msgid "Allow from <0>{0}</0>"
 msgstr ""
 
-#: src/pages/settings.jsx:1266
+#: src/pages/settings.jsx:1314
 msgid "anyone"
 msgstr ""
 
-#: src/pages/settings.jsx:1270
+#: src/pages/settings.jsx:1318
 msgid "people I follow"
 msgstr ""
 
-#: src/pages/settings.jsx:1274
+#: src/pages/settings.jsx:1322
 msgid "followers"
 msgstr ""
 
-#: src/pages/settings.jsx:1307
+#: src/pages/settings.jsx:1355
 msgid "Follows"
 msgstr ""
 
-#: src/pages/settings.jsx:1315
+#: src/pages/settings.jsx:1363
 msgid "Polls"
 msgstr ""
 
-#: src/pages/settings.jsx:1319
+#: src/pages/settings.jsx:1367
 msgid "Post edits"
 msgstr ""
 
-#: src/pages/settings.jsx:1340
+#: src/pages/settings.jsx:1388
 msgid "Push permission was not granted since your last login. You'll need to <0><1>log in</1> again to grant push permission</0>."
 msgstr ""
 
-#: src/pages/settings.jsx:1356
+#: src/pages/settings.jsx:1404
 msgid "NOTE: Push notifications only work for <0>one account</0>."
 msgstr ""
 

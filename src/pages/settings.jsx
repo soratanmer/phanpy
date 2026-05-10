@@ -369,6 +369,54 @@ function Settings({ onClose }) {
             </p>
           </>
         )}
+        {authenticated && (
+          <>
+            <h3>
+              <Trans>Wellbeing</Trans>
+            </h3>
+            <section>
+              <ul>
+                <li class="block">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={snapStates.settings.hideTrendingTimeline}
+                      onChange={(e) => {
+                        states.settings.hideTrendingTimeline = e.target.checked;
+                      }}
+                    />{' '}
+                    <Trans>Hide Trending timeline</Trans>
+                  </label>
+                </li>
+                <li class="block">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={snapStates.settings.hideLocalTimeline}
+                      onChange={(e) => {
+                        states.settings.hideLocalTimeline = e.target.checked;
+                      }}
+                    />{' '}
+                    <Trans>Hide Local timeline</Trans>
+                  </label>
+                </li>
+                <li class="block">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={snapStates.settings.hideFederatedTimeline}
+                      onChange={(e) => {
+                        states.settings.hideFederatedTimeline =
+                          e.target.checked;
+                      }}
+                    />{' '}
+                    <Trans>Hide Federated timeline</Trans>
+                  </label>
+                </li>
+              </ul>
+            </section>
+          </>
+        )}
         <h3>
           <Trans>Experiments</Trans>
         </h3>
