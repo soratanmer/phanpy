@@ -30,6 +30,7 @@ import getTranslateTargetLanguage from '../utils/get-translate-target-language';
 import getHTMLText from '../utils/getHTMLText';
 import haptics from '../utils/haptics';
 import htmlContentLength from '../utils/html-content-length';
+import isSameURL from '../utils/is-same-url';
 import localeMatch from '../utils/locale-match';
 import mem from '../utils/mem';
 import niceDateTime from '../utils/nice-date-time';
@@ -54,6 +55,7 @@ import visibilityIconsMap from '../utils/visibility-icons-map';
 import visibilityText from '../utils/visibility-text';
 
 import Avatar from './avatar';
+import CollectionCard from './collection-card';
 import CustomEmoji from './custom-emoji';
 import EmojiText from './emoji-text';
 import Icon from './icon';
@@ -457,6 +459,7 @@ function Status({
     editedAt,
     filtered,
     card,
+    taggedCollections,
     createdAt,
     inReplyToId,
     inReplyToAccountId,
@@ -2063,6 +2066,11 @@ function Status({
       ? forceShowQuoteCount(quotesCount)
       : forceShowQuoteCount && quotesCount > 0;
 
+  const _taggedCollections = taggedCollections;
+  const collectionForCard = _taggedCollections?.find((c) => {
+    return isSameURL(c.url, card?.url);
+  });
+
   return (
     <StatusParent>
       {showReplyParent && !!(inReplyToId && inReplyToAccountId) && (
@@ -2756,13 +2764,20 @@ function Status({
                   collapsed={!isSizeLarge && !withinContext}
                   fallbackQuote={quote}
                 />
-                {!!card &&
-                  /^https/i.test(card?.url) &&
-                  !sensitive &&
-                  !spoilerText &&
-                  !poll &&
+                {!poll &&
                   !mediaAttachments.length &&
-                  !snapStates.statusQuotes[sKey] && (
+                  !snapStates.statusQuotes[sKey] &&
+                  (collectionForCard ? (
+                    <CollectionCard
+                      collection={collectionForCard}
+                      instance={currentInstance}
+                      creatorAccount={
+                        collectionForCard.accountId === accountId
+                          ? status.account
+                          : undefined
+                      }
+                    />
+                  ) : !!card && /^https/i.test(card?.url) ? (
                     <StatusCard
                       card={card}
                       selfReferential={
@@ -2773,7 +2788,17 @@ function Status({
                       )}
                       instance={currentInstance}
                     />
-                  )}
+                  ) : _taggedCollections?.length ? (
+                    <CollectionCard
+                      collection={_taggedCollections[0]}
+                      instance={currentInstance}
+                      creatorAccount={
+                        _taggedCollections[0].accountId === accountId
+                          ? status.account
+                          : undefined
+                      }
+                    />
+                  ) : null)}
                 {size !== 's' && <StatusTags tags={tags} content={content} />}
               </>
             )}
