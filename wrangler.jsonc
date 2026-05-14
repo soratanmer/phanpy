@@ -2,6 +2,6 @@
   "name": "phanpy",
   "compatibility_date": "2025-06-18",
   "assets": {
-    "directory": "./dist",
-  },
+    "directory": "./dist"
+  }
 }
