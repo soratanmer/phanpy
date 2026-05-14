@@ -1267,7 +1267,7 @@ msgid "Format math"
 msgstr "Format math"
 
 #: src/components/media-alt-modal.jsx:48
-#: src/components/media.jsx:51
+#: src/components/media.jsx:52
 msgid "Media description"
 msgstr ""
 
@@ -1412,7 +1412,7 @@ msgstr ""
 msgid "Filtered"
 msgstr ""
 
-#: src/components/media.jsx:511
+#: src/components/media.jsx:532
 msgid "Open file"
 msgstr "Open file"
 

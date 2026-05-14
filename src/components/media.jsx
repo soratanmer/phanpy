@@ -4,6 +4,7 @@ import { Fragment } from 'preact';
 import { memo } from 'preact/compat';
 import {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -334,6 +335,26 @@ function Media({
     },
     [mediaVTN, showOriginal, onClick],
   );
+
+  // Prevent media session lingering after unmount
+  useEffect(() => {
+    return () => {
+      const mediaElements =
+        parentRef.current?.querySelectorAll?.('video, audio');
+      if (mediaElements) {
+        mediaElements.forEach((el) => {
+          try {
+            el.pause();
+            el.src = '';
+            el.load();
+          } catch (e) {}
+        });
+      }
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'none';
+      }
+    };
+  }, []);
 
   if (isImage) {
     // Note: type: unknown might not have width/height
