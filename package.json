@@ -4,6 +4,9 @@
   "type": "module",
   "os": ["darwin", "linux", "win32"],
   "cpu": ["x64", "arm64"],
+  "engines": {
+    "npm": ">=10.3.0 <11.5.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
