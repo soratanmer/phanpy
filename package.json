@@ -2,8 +2,6 @@
   "name": "phanpy",
   "version": "0.1.0",
   "type": "module",
-  "os": ["darwin", "linux", "win32"],
-  "cpu": ["x64", "arm64"],
   "engines": {
     "npm": ">=10.3.0 <11.5.0"
   },
