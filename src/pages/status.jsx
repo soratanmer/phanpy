@@ -81,6 +81,7 @@ const STATUS_URL_REGEX = /\/s\//i;
 import { ThreadCountContext } from '../utils/thread-count-context';
 
 function StatusPage(params) {
+  const { t } = useLingui();
   const { id } = params;
   const { masto, instance } = api({ instance: params.instance });
   const snapStates = useSnapshot(states);
@@ -152,7 +153,7 @@ function StatusPage(params) {
           setHeroStatus(status);
         } catch (err) {
           console.error(err);
-          alert('Unable to load post.');
+          alert(t`Unable to load post.`);
           location.hash = closeLink;
         }
       })();
