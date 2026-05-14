@@ -2,6 +2,8 @@
   "name": "phanpy",
   "version": "0.1.0",
   "type": "module",
+  "os": ["darwin", "linux", "win32"],
+  "cpu": ["x64", "arm64"],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
