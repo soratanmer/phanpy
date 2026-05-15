@@ -58,7 +58,7 @@
     "preact": "10.29.1",
     "punycode": "~2.3.1",
     "qr": "~0.6.0",
-    "react-hotkeys-hook": "~5.3.2",
+    "react-hotkeys-hook": "~5.2.4",
     "react-intersection-observer": "~10.0.3",
     "react-quick-pinch-zoom": "~5.1.1",
     "react-router-dom": "6.6.2",
