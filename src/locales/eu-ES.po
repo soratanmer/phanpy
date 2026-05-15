@@ -8,7 +8,7 @@ msgstr ""
 "Language: eu\n"
 "Project-Id-Version: phanpy\n"
 "Report-Msgid-Bugs-To: \n"
-"PO-Revision-Date: 2026-03-25 13:05\n"
+"PO-Revision-Date: 2026-05-14 05:51\n"
 "Last-Translator: \n"
 "Language-Team: Basque\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
@@ -18,63 +18,63 @@ msgstr ""
 "X-Crowdin-File: /main/src/locales/en.po\n"
 "X-Crowdin-File-ID: 18\n"
 
-#: src/components/account-block.jsx:143
+#: src/components/account-block.jsx:145
 msgid "Locked"
 msgstr "Babestua"
 
 #. placeholder {0}: shortenNumber(statusesCount)
-#: src/components/account-block.jsx:150
+#: src/components/account-block.jsx:152
 msgid "Posts: {0}"
 msgstr "Bidalketak: {0}"
 
 #. placeholder {0}: niceDateTime(lastStatusAt, { hideTime: true, })
-#: src/components/account-block.jsx:155
+#: src/components/account-block.jsx:157
 msgid "Last posted: {0}"
 msgstr "Azken bidalketa: {0}"
 
-#: src/components/account-block.jsx:170
-#: src/components/account-info.jsx:726
+#: src/components/account-block.jsx:172
+#: src/components/account-info.jsx:738
 msgid "Automated"
 msgstr "Automatizatua"
 
-#: src/components/account-block.jsx:177
-#: src/components/account-info.jsx:731
-#: src/components/status.jsx:607
+#: src/components/account-block.jsx:179
+#: src/components/account-info.jsx:743
+#: src/components/status.jsx:610
 msgid "Group"
 msgstr "Taldea"
 
-#: src/components/account-block.jsx:187
+#: src/components/account-block.jsx:189
 msgid "Mutual"
 msgstr "Batak bestea"
 
-#: src/components/account-block.jsx:191
-#: src/components/related-actions.jsx:962
+#: src/components/account-block.jsx:193
+#: src/components/related-actions.jsx:957
 msgid "Requested"
 msgstr "Eskatuta"
 
-#: src/components/account-block.jsx:195
-#: src/components/related-actions.jsx:953
+#: src/components/account-block.jsx:197
+#: src/components/related-actions.jsx:948
 msgid "Following"
 msgstr "Jarraitzen"
 
-#: src/components/account-block.jsx:199
+#: src/components/account-block.jsx:201
 #: src/components/related-actions.jsx:200
 msgid "Follows you"
 msgstr "Jarraitzen dizu"
 
-#: src/components/account-block.jsx:207
+#: src/components/account-block.jsx:209
 msgid "{followersCount, plural, one {# follower} other {# followers}}"
 msgstr "{followersCount, plural, one {jarraitzaile #} other {# jarraitzaile}}"
 
-#: src/components/account-block.jsx:216
-#: src/components/account-info.jsx:774
+#: src/components/account-block.jsx:218
+#: src/components/account-info.jsx:786
 msgid "Verified"
 msgstr "Egiaztatua"
 
 #. placeholder {0}: niceDateTime(createdAt, { hideTime: true, })
 #. placeholder {0}: niceDateTime(createdAt, { hideTime: true, })
-#: src/components/account-block.jsx:231
-#: src/components/account-info.jsx:913
+#: src/components/account-block.jsx:233
+#: src/components/account-info.jsx:925
 msgid "Joined <0>{0}</0>"
 msgstr "<0>{0}</0>(e)an batu zen"
 
@@ -87,8 +87,8 @@ msgid "server domain name"
 msgstr "zerbitzariaren domeinu-izena"
 
 #: src/components/account-info-mini.jsx:57
-#: src/components/account-info.jsx:796
-#: src/components/compose.jsx:2048
+#: src/components/account-info.jsx:808
+#: src/components/compose.jsx:2050
 #: src/pages/settings.jsx:300
 #: src/utils/visibility-text.jsx:7
 msgid "Followers"
@@ -96,94 +96,104 @@ msgstr "jarraitzaile"
 
 #: src/components/account-info-mini.jsx:61
 #: src/components/account-info-mini.jsx:100
-#: src/components/account-info.jsx:803
-#: src/components/account-info.jsx:861
+#: src/components/account-info.jsx:815
+#: src/components/account-info.jsx:873
 msgid "This user has chosen to not make this information available."
 msgstr "Erabiltzaileak informazio hau publiko ez egitea aukeratu du."
 
 #. placeholder {0}: shortenNumber(followersCount)
 #. placeholder {1}: shortenNumber(followersCount)
 #: src/components/account-info-mini.jsx:67
-#: src/components/account-info.jsx:823
+#: src/components/account-info.jsx:835
 msgid "{followersCount, plural, one {<0>{0}</0> Follower} other {<1>{1}</1> Followers}}"
 msgstr "{followersCount, plural, one {Jarraitzaile <0>{0}</0>} other {<1>{1}</1> jarraitzaile}}"
 
 #. js-lingui-explicit-id
 #: src/components/account-info-mini.jsx:93
-#: src/components/account-info.jsx:851
+#: src/components/account-info.jsx:863
 msgid "following.stats"
 msgstr "jarraitzen"
 
 #. placeholder {0}: shortenNumber(followingCount)
 #: src/components/account-info-mini.jsx:106
-#: src/components/account-info.jsx:867
+#: src/components/account-info.jsx:879
 msgid "{followingCount, plural, other {<0>{0}</0> Following}}"
 msgstr "{followingCount, plural, one {}other {<0>{0}</0> jarraitzen}}"
 
 #. placeholder {0}: shortenNumber(statusesCount)
 #. placeholder {1}: shortenNumber(statusesCount)
 #: src/components/account-info-mini.jsx:119
-#: src/components/account-info.jsx:891
+#: src/components/account-info.jsx:903
 msgid "{statusesCount, plural, one {<0>{0}</0> Post} other {<1>{1}</1> Posts}}"
 msgstr "{statusesCount, plural, one {Bidalketa <0>{0}</0>} other {<1>{1}</1> bidalketa}}"
 
-#: src/components/account-info.jsx:124
+#: src/components/account-info.jsx:125
 msgid "View profile"
 msgstr "Ikusi profila"
 
-#: src/components/account-info.jsx:392
+#: src/components/account-info.jsx:396
 msgid "Unable to load account."
 msgstr "Ezin da kontua kargatu."
 
-#: src/components/account-info.jsx:407
+#: src/components/account-info.jsx:411
 msgid "Go to account page"
 msgstr "Joan kontuaren orrira"
 
-#: src/components/account-info.jsx:462
+#: src/components/account-info.jsx:417
+#: src/components/timeline.jsx:656
+#: src/components/timeline2.jsx:685
+#: src/pages/home.jsx:243
+#: src/pages/notifications.jsx:1032
+#: src/pages/status.jsx:1270
+#: src/pages/status.jsx:1746
+msgid "Try again"
+msgstr "Saiatu berriro"
+
+#: src/components/account-info.jsx:471
 msgid "<0>{displayName}</0> has indicated that their new account is now:"
 msgstr "<0>{displayName}</0>(e)k adierazi du kontu berria duela:"
 
-#: src/components/account-info.jsx:617
-#: src/components/related-actions.jsx:530
+#: src/components/account-info.jsx:627
+#: src/components/related-actions.jsx:513
 msgid "Handle copied"
 msgstr "Helbidea kopiatu da"
 
-#: src/components/account-info.jsx:620
-#: src/components/related-actions.jsx:533
+#: src/components/account-info.jsx:630
+#: src/components/related-actions.jsx:516
 msgid "Unable to copy handle"
 msgstr "Ezin da helbidea kopiatu"
 
-#: src/components/account-info.jsx:626
-#: src/components/related-actions.jsx:539
+#: src/components/account-info.jsx:636
+#: src/components/related-actions.jsx:522
 msgid "Copy handle"
 msgstr "Kopiatu helbidea"
 
-#: src/components/account-info.jsx:644
-#: src/components/related-actions.jsx:255
-#: src/components/related-actions.jsx:604
+#: src/components/account-info.jsx:654
+#: src/components/related-actions.jsx:587
+#: src/components/related-actions.jsx:862
 #: src/components/shortcuts-settings.jsx:1099
 msgid "QR code"
 msgstr "QR kodea"
 
-#: src/components/account-info.jsx:650
+#: src/components/account-info.jsx:660
 msgid "Go to original profile page"
 msgstr "Joan jatorrizko profilaren orrira"
 
-#: src/components/account-info.jsx:668
+#: src/components/account-info.jsx:679
 msgid "View profile image"
 msgstr "Ikusi profileko irudia"
 
-#: src/components/account-info.jsx:686
+#: src/components/account-info.jsx:698
 msgid "View profile header"
 msgstr "Ikusi goiburuko irudia"
 
-#: src/components/account-info.jsx:702
-#: src/components/edit-profile-sheet.jsx:94
-#: src/components/related-actions.jsx:856
+#: src/components/account-info.jsx:714
+#: src/components/edit-profile-sheet.jsx:267
+#: src/components/related-actions.jsx:876
 msgid "Edit profile"
 msgstr "Editatu profila"
 
-#: src/components/account-info.jsx:721
+#: src/components/account-info.jsx:733
 msgid "In Memoriam"
 msgstr "In Memoriam"
 
@@ -191,14 +201,14 @@ msgstr "In Memoriam"
 #. placeholder {1}: ( postingStats.replies / postingStats.total ).toLocaleString(i18n.locale || undefined, { style: 'percent', })
 #. placeholder {2}: ( postingStats.quotes / postingStats.total ).toLocaleString(i18n.locale || undefined, { style: 'percent', })
 #. placeholder {3}: ( postingStats.boosts / postingStats.total ).toLocaleString(i18n.locale || undefined, { style: 'percent', })
-#: src/components/account-info.jsx:948
+#: src/components/account-info.jsx:960
 msgid "{0} original posts, {1} replies, {2} quotes, {3} boosts"
 msgstr "{0} jatorrizko bidalketa, {1} erantzun, {2} iruzkin, {3} bultzada"
 
 #. placeholder {0}: ( postingStats.originals / postingStats.total ).toLocaleString(i18n.locale || undefined, { style: 'percent', })
 #. placeholder {1}: ( postingStats.replies / postingStats.total ).toLocaleString(i18n.locale || undefined, { style: 'percent', })
 #. placeholder {2}: ( postingStats.boosts / postingStats.total ).toLocaleString(i18n.locale || undefined, { style: 'percent', })
-#: src/components/account-info.jsx:965
+#: src/components/account-info.jsx:977
 msgid "{0} original posts, {1} replies, {2} boosts"
 msgstr "{0} bidalketa original, {1} erantzun, {2} bultzada"
 
@@ -209,65 +219,67 @@ msgstr "{0} bidalketa original, {1} erantzun, {2} bultzada"
 #. placeholder {4}: postingStats.total
 #. placeholder {5}: postingStats.total
 #. placeholder {6}: postingStats.daysSinceLastPost
-#: src/components/account-info.jsx:982
+#: src/components/account-info.jsx:994
 msgid "{0, plural, one {{1, plural, one {Last 1 post in the past 1 day} other {Last 1 post in the past {2} days}}} other {{3, plural, one {Last {4} posts in the past 1 day} other {Last {5} posts in the past {6} days}}}}"
 msgstr "{0, plural, one {{1, plural, one {Azken bidalketa azken egunean} other {Azken bidalketa azken {2} egunetan}}} other {{3, plural, one {Azken {4} bidalketak azken egunean} other {Azken {5} bidalketak azken {6} egunetan}}}}"
 
 #. placeholder {0}: postingStats.total
 #. placeholder {1}: postingStats.total
-#: src/components/account-info.jsx:998
+#: src/components/account-info.jsx:1010
 msgid "{0, plural, one {Last 1 post in the past year(s)} other {Last {1} posts in the past year(s)}}"
 msgstr "{0, plural, one {Azken bidalketa azken urte(et)an} other {Azken {1} bidalketak azken urte(et)an}}"
 
-#: src/components/account-info.jsx:1056
+#: src/components/account-info.jsx:1068
 #: src/pages/catchup.jsx:73
 #: src/pages/year-in-posts.jsx:1390
 msgid "Original"
 msgstr "Originalak"
 
-#: src/components/account-info.jsx:1060
-#: src/components/status.jsx:2787
+#: src/components/account-info.jsx:1072
+#: src/components/status.jsx:2810
+#: src/pages/account-statuses.jsx:428
 #: src/pages/catchup.jsx:74
 #: src/pages/catchup.jsx:1594
 #: src/pages/catchup.jsx:2249
-#: src/pages/status.jsx:1207
-#: src/pages/status.jsx:1932
+#: src/pages/status.jsx:1216
+#: src/pages/status.jsx:1946
 #: src/pages/year-in-posts.jsx:1394
 msgid "Replies"
 msgstr "Erantzunak"
 
-#: src/components/account-info.jsx:1065
+#: src/components/account-info.jsx:1077
 #: src/components/quotes-modal.jsx:81
-#: src/components/status.jsx:2792
+#: src/components/status.jsx:2815
 #: src/pages/catchup.jsx:75
 #: src/pages/catchup.jsx:1597
 #: src/pages/year-in-posts.jsx:1400
 msgid "Quotes"
 msgstr "Iruzkinak"
 
-#: src/components/account-info.jsx:1070
+#: src/components/account-info.jsx:1082
+#: src/pages/account-statuses.jsx:444
 #: src/pages/catchup.jsx:76
 #: src/pages/catchup.jsx:1596
 #: src/pages/catchup.jsx:2261
-#: src/pages/settings.jsx:1303
+#: src/pages/settings.jsx:1351
 #: src/pages/year-in-posts.jsx:1406
 msgid "Boosts"
 msgstr "Bultzadak"
 
-#: src/components/account-info.jsx:1076
+#: src/components/account-info.jsx:1088
 msgid "Post stats unavailable."
 msgstr "Bidalketaren estatistikak ez daude erabilgarri."
 
-#: src/components/account-info.jsx:1103
+#: src/components/account-info.jsx:1115
 msgid "View post stats"
 msgstr "Ikusi bidalketen estatistikak"
 
 #: src/components/account-sheet.jsx:38
 #: src/components/add-remove-lists-sheet.jsx:45
 #: src/components/compose.jsx:1127
-#: src/components/custom-emojis-modal.jsx:272
+#: src/components/custom-emojis-modal.jsx:282
 #: src/components/drafts.jsx:57
-#: src/components/edit-profile-sheet.jsx:89
+#: src/components/edit-profile-sheet.jsx:262
 #: src/components/embed-modal.jsx:13
 #: src/components/generic-accounts.jsx:151
 #: src/components/gif-picker-modal.jsx:71
@@ -276,7 +288,7 @@ msgstr "Ikusi bidalketen estatistikak"
 #: src/components/keyboard-shortcuts-help.jsx:53
 #: src/components/list-add-edit.jsx:37
 #: src/components/media-alt-modal.jsx:43
-#: src/components/media-attachment.jsx:415
+#: src/components/media-attachment.jsx:420
 #: src/components/media-modal.jsx:336
 #: src/components/mention-modal.jsx:162
 #: src/components/notification-service.jsx:157
@@ -292,23 +304,23 @@ msgstr "Ikusi bidalketen estatistikak"
 #: src/components/shortcuts-settings.jsx:247
 #: src/components/shortcuts-settings.jsx:600
 #: src/components/shortcuts-settings.jsx:801
-#: src/components/status.jsx:3457
-#: src/components/status.jsx:3669
+#: src/components/status.jsx:3480
+#: src/components/status.jsx:3692
 #: src/components/translated-bio-sheet.jsx:21
 #: src/pages/accounts.jsx:46
 #: src/pages/catchup.jsx:1731
 #: src/pages/filters.jsx:225
 #: src/pages/list.jsx:302
-#: src/pages/notifications.jsx:1056
+#: src/pages/notifications.jsx:1076
 #: src/pages/scheduled-posts.jsx:288
 #: src/pages/settings.jsx:104
-#: src/pages/status.jsx:1671
+#: src/pages/status.jsx:1684
 msgid "Close"
 msgstr "Itxi"
 
 #: src/components/add-remove-lists-sheet.jsx:50
-#: src/components/related-actions.jsx:480
-#: src/components/related-actions.jsx:490
+#: src/components/related-actions.jsx:463
+#: src/components/related-actions.jsx:473
 msgid "Add/Remove from Lists"
 msgstr "Gehitu zerrendara / kendu zerrendatik"
 
@@ -348,6 +360,10 @@ msgstr "Estalki modua gaituta"
 msgid "More from <0/>"
 msgstr "<0/>(r)en gehiago"
 
+#: src/components/collection-card.jsx:140
+msgid "Collection by <0>@{username}</0>"
+msgstr ""
+
 #: src/components/columns.jsx:29
 #: src/components/nav-menu.jsx:187
 #: src/components/shortcuts-settings.jsx:142
@@ -358,7 +374,7 @@ msgstr "<0/>(r)en gehiago"
 #: src/pages/followed-hashtags.jsx:41
 #: src/pages/home.jsx:61
 #: src/pages/home.jsx:69
-#: src/pages/notifications.jsx:689
+#: src/pages/notifications.jsx:709
 #: src/pages/scheduled-posts.jsx:74
 msgid "Home"
 msgstr "Hasiera"
@@ -385,7 +401,7 @@ msgid "Choice {0}"
 msgstr "{0}. aukera"
 
 #: src/components/compose-poll.jsx:64
-#: src/components/media-attachment.jsx:379
+#: src/components/media-attachment.jsx:384
 #: src/components/shortcuts-settings.jsx:743
 #: src/pages/catchup.jsx:1228
 #: src/pages/filters.jsx:415
@@ -393,7 +409,7 @@ msgid "Remove"
 msgstr "Kendu"
 
 #: src/components/compose-poll.jsx:80
-#: src/components/compose.jsx:1756
+#: src/components/compose.jsx:1758
 #: src/components/mention-modal.jsx:221
 #: src/components/shortcuts-settings.jsx:732
 #: src/pages/list.jsx:388
@@ -448,7 +464,7 @@ msgid "{0, plural, one {File {1} is not supported.} other {Files {2} are not sup
 msgstr "{0, plural, one {{1} fitxategia ez da bateragarria.} other {{2} fitxategiak ez dira bateragarriak.}}"
 
 #: src/components/compose.jsx:293
-#: src/components/compose.jsx:2183
+#: src/components/compose.jsx:2184
 #: src/components/file-picker-input.jsx:47
 msgid "{maxMediaAttachments, plural, one {You can only attach up to 1 file.} other {You can only attach up to # files.}}"
 msgstr "{maxMediaAttachments, plural, one {Fitxategi bakarra erantsi dezakezu.} other {# fitxategi erantsi ditzakezu gehienez.}}"
@@ -512,15 +528,15 @@ msgstr "Ez dituzu multimedia fitxategi batzuk deskribatu. Jarraitu?"
 msgid "Attachment #{i} failed"
 msgstr "#{i} eranskinak huts egin du"
 
-#: src/components/compose.jsx:1512
-#: src/components/status.jsx:2549
+#: src/components/compose.jsx:1514
+#: src/components/status.jsx:2555
 #: src/components/timeline.jsx:1065
 msgid "Content warning"
 msgstr "Edukiari buruzko abisua"
 
-#: src/components/compose.jsx:1544
-#: src/components/compose.jsx:1690
-#: src/components/edit-profile-sheet.jsx:326
+#: src/components/compose.jsx:1546
+#: src/components/compose.jsx:1692
+#: src/components/edit-profile-sheet.jsx:692
 #: src/components/import-accounts-selection.jsx:175
 #: src/components/open-link-sheet.jsx:74
 #: src/components/private-note-sheet.jsx:92
@@ -528,151 +544,151 @@ msgstr "Edukiari buruzko abisua"
 msgid "Cancel"
 msgstr "Utzi"
 
-#: src/components/compose.jsx:1552
+#: src/components/compose.jsx:1554
 msgid "Post your reply"
 msgstr "Argitaratu erantzuna"
 
-#: src/components/compose.jsx:1554
+#: src/components/compose.jsx:1556
 msgid "Edit your post"
 msgstr "Editatu bidalketa"
 
-#: src/components/compose.jsx:1556
+#: src/components/compose.jsx:1558
 msgid "Ask a question"
 msgstr "Egin galdera bat"
 
-#: src/components/compose.jsx:1557
+#: src/components/compose.jsx:1559
 msgid "What are you doing?"
 msgstr "Zertan zabiltza?"
 
-#: src/components/compose.jsx:1630
+#: src/components/compose.jsx:1632
 msgid "Mark media as sensitive"
 msgstr "Markatu multimedia hunkigarri gisa"
 
-#: src/components/compose.jsx:1670
+#: src/components/compose.jsx:1672
 msgid "Posting on <0/>"
 msgstr "Programatu <0/>"
 
-#: src/components/compose.jsx:1968
+#: src/components/compose.jsx:1970
 #: src/components/quote-settings-sheet.jsx:82
-#: src/components/status.jsx:298
+#: src/components/status.jsx:300
 #: src/pages/settings.jsx:342
 msgid "Anyone can quote"
 msgstr "Edonork iruzkindu dezake"
 
-#: src/components/compose.jsx:1971
+#: src/components/compose.jsx:1973
 #: src/components/quote-settings-sheet.jsx:85
-#: src/components/status.jsx:299
+#: src/components/status.jsx:301
 #: src/pages/settings.jsx:345
 msgid "Your followers can quote"
 msgstr "Jarraitzaileek iruzkindu dezakete"
 
-#: src/components/compose.jsx:1974
+#: src/components/compose.jsx:1976
 #: src/components/quote-settings-sheet.jsx:88
-#: src/components/status.jsx:300
+#: src/components/status.jsx:302
 #: src/pages/settings.jsx:348
 msgid "Only you can quote"
 msgstr "Zeuk bakarrik iruzkindu dezakezu"
 
-#: src/components/compose.jsx:2014
+#: src/components/compose.jsx:2016
 msgid "Quotes can't be embedded in private mentions."
 msgstr "Aipuak ezin dira aipamen pribatuetan txertatu."
 
-#: src/components/compose.jsx:2036
+#: src/components/compose.jsx:2038
 #: src/pages/settings.jsx:294
 #: src/utils/visibility-text.jsx:4
 msgid "Public"
 msgstr "Publikoa"
 
-#: src/components/compose.jsx:2041
-#: src/components/nav-menu.jsx:355
+#: src/components/compose.jsx:2043
+#: src/components/nav-menu.jsx:358
 #: src/components/shortcuts-settings.jsx:168
 #: src/utils/visibility-text.jsx:5
 msgid "Local"
 msgstr "Lokala"
 
-#: src/components/compose.jsx:2045
+#: src/components/compose.jsx:2047
 #: src/pages/settings.jsx:297
 #: src/utils/visibility-text.jsx:6
 msgid "Quiet public"
 msgstr "Ikusgarritasun mugatua"
 
-#: src/components/compose.jsx:2051
-#: src/components/status.jsx:2427
+#: src/components/compose.jsx:2053
+#: src/components/status.jsx:2434
 #: src/utils/visibility-text.jsx:8
 msgid "Private mention"
 msgstr "Aipamen pribatua"
 
-#: src/components/compose.jsx:2107
+#: src/components/compose.jsx:2109
 msgid "Schedule"
 msgstr "Programatu"
 
-#: src/components/compose.jsx:2109
+#: src/components/compose.jsx:2111
 #: src/components/keyboard-shortcuts-help.jsx:165
-#: src/components/status.jsx:1103
-#: src/components/status.jsx:1152
-#: src/components/status.jsx:2178
-#: src/components/status.jsx:2179
-#: src/components/status.jsx:2919
-#: src/components/status.jsx:2931
+#: src/components/status.jsx:1106
+#: src/components/status.jsx:1155
+#: src/components/status.jsx:2186
+#: src/components/status.jsx:2187
+#: src/components/status.jsx:2942
+#: src/components/status.jsx:2954
 msgid "Reply"
 msgstr "Erantzun"
 
-#: src/components/compose.jsx:2111
+#: src/components/compose.jsx:2113
 msgid "Update"
 msgstr "Eguneratu"
 
-#: src/components/compose.jsx:2112
+#: src/components/compose.jsx:2114
 msgctxt "Submit button in composer"
 msgid "Post"
 msgstr "Argitaratu"
 
-#: src/components/compose.jsx:2195
+#: src/components/compose.jsx:2196
 msgid "Downloading GIF…"
 msgstr "GIFa deskargatzen…"
 
-#: src/components/compose.jsx:2219
+#: src/components/compose.jsx:2220
 msgid "Failed to download GIF"
 msgstr "Ezin da GIFa deskargatu"
 
-#. placeholder {0}: i18n.number(emojis.length - max)
-#: src/components/custom-emojis-modal.jsx:103
+#. placeholder {0}: NF(i18n.locale).format(emojis.length - max)
+#: src/components/custom-emojis-modal.jsx:106
 msgid "{0} more…"
 msgstr "{0} gehiago…"
 
-#: src/components/custom-emojis-modal.jsx:278
+#: src/components/custom-emojis-modal.jsx:288
 msgid "Custom emojis"
 msgstr "Instantziako emojiak"
 
-#: src/components/custom-emojis-modal.jsx:299
+#: src/components/custom-emojis-modal.jsx:333
 msgid "Search emoji"
 msgstr "Bilatu emojia"
 
-#: src/components/custom-emojis-modal.jsx:334
+#: src/components/custom-emojis-modal.jsx:366
 msgid "Error loading custom emojis"
 msgstr "Errorea emoji pertsonalizatua kargatzean"
 
-#: src/components/custom-emojis-modal.jsx:345
+#: src/components/custom-emojis-modal.jsx:377
 msgid "Recently used"
 msgstr "Oraintsu erabilita"
 
-#: src/components/custom-emojis-modal.jsx:346
+#: src/components/custom-emojis-modal.jsx:378
 msgid "Others"
 msgstr "Besteak"
 
-#: src/components/custom-emojis-modal.jsx:365
+#: src/components/custom-emojis-modal.jsx:397
 msgid "Zoom out"
 msgstr "Txikiagotu"
 
-#: src/components/custom-emojis-modal.jsx:373
+#: src/components/custom-emojis-modal.jsx:405
 msgid "Zoom in"
 msgstr "Handiagotu"
 
-#: src/components/custom-emojis-modal.jsx:380
+#: src/components/custom-emojis-modal.jsx:412
 msgid "Custom emojis are not available on this server."
 msgstr "Emoji pertsonalizatuak ez daude erabilgarri zerbitzari honetan."
 
 #: src/components/drafts.jsx:62
-#: src/pages/settings.jsx:732
+#: src/pages/settings.jsx:780
 msgid "Unsent drafts"
 msgstr "Bidali gabeko zirriborroak"
 
@@ -689,8 +705,10 @@ msgid "Error deleting draft! Please try again."
 msgstr "Errorea zirriborroa ezabatzean! Saiatu berriro."
 
 #: src/components/drafts.jsx:126
+#: src/components/edit-profile-sheet.jsx:108
+#: src/components/edit-profile-sheet.jsx:120
 #: src/components/list-add-edit.jsx:188
-#: src/components/status.jsx:1682
+#: src/components/status.jsx:1685
 #: src/pages/filters.jsx:605
 #: src/pages/scheduled-posts.jsx:398
 msgid "Delete…"
@@ -726,13 +744,13 @@ msgid "Poll"
 msgstr "Bozketa"
 
 #: src/components/drafts.jsx:279
-#: src/pages/account-statuses.jsx:440
+#: src/pages/account-statuses.jsx:462
 msgid "Media"
 msgstr "Multimedia"
 
 #: src/components/drafts.jsx:283
 #: src/components/keyboard-shortcuts-help.jsx:194
-#: src/components/status.jsx:764
+#: src/components/status.jsx:767
 msgid "Quote"
 msgstr "Iruzkindu"
 
@@ -758,45 +776,126 @@ msgstr "Hurrengoa"
 msgid "Exit"
 msgstr "Irten"
 
-#: src/components/edit-profile-sheet.jsx:149
+#: src/components/edit-profile-sheet.jsx:87
+#: src/components/media-alt-modal.jsx:55
+#: src/components/media-attachment.jsx:465
+#: src/components/media-modal.jsx:372
+#: src/components/related-actions.jsx:256
+#: src/components/status.jsx:2211
+#: src/components/status.jsx:2228
+#: src/components/status.jsx:2360
+#: src/components/status.jsx:3113
+#: src/components/status.jsx:3116
+#: src/pages/account-statuses.jsx:676
+#: src/pages/accounts.jsx:149
+#: src/pages/hashtag.jsx:232
+#: src/pages/list.jsx:171
+#: src/pages/public.jsx:147
+#: src/pages/scheduled-posts.jsx:89
+#: src/pages/status.jsx:1585
+#: src/pages/trending.jsx:474
+msgid "More"
+msgstr "Gehiago"
+
+#: src/components/edit-profile-sheet.jsx:94
+#: src/components/shortcuts-settings.jsx:368
+#: src/pages/accounts.jsx:219
+msgid "Move up"
+msgstr "Mugitu gora"
+
+#: src/components/edit-profile-sheet.jsx:100
+#: src/components/shortcuts-settings.jsx:384
+#: src/pages/accounts.jsx:234
+msgid "Move down"
+msgstr "Mugitu behera"
+
+#: src/components/edit-profile-sheet.jsx:115
+msgid "Delete this field?"
+msgstr ""
+
+#: src/components/edit-profile-sheet.jsx:225
+msgid "Unable to remove profile picture."
+msgstr ""
+
+#: src/components/edit-profile-sheet.jsx:245
+msgid "Unable to remove header picture."
+msgstr ""
+
+#: src/components/edit-profile-sheet.jsx:296
+msgid "Profile and header pictures have no descriptions. Continue?"
+msgstr ""
+
+#: src/components/edit-profile-sheet.jsx:303
+msgid "Profile picture has no description. Continue?"
+msgstr ""
+
+#: src/components/edit-profile-sheet.jsx:309
+msgid "Header picture has no description. Continue?"
+msgstr ""
+
+#: src/components/edit-profile-sheet.jsx:371
 msgid "Unable to update profile."
 msgstr "Ezin da profila eguneratu."
 
-#: src/components/edit-profile-sheet.jsx:156
+#: src/components/edit-profile-sheet.jsx:389
 msgid "Header picture"
 msgstr "Goiburuko irudia"
 
-#: src/components/edit-profile-sheet.jsx:208
+#: src/components/edit-profile-sheet.jsx:444
+#: src/components/edit-profile-sheet.jsx:536
+#: src/components/media-attachment.jsx:242
+msgid "Image description"
+msgstr "Irudiaren deskribapena"
+
+#: src/components/edit-profile-sheet.jsx:462
+msgid "Remove header picture?"
+msgstr ""
+
+#: src/components/edit-profile-sheet.jsx:473
+#: src/components/edit-profile-sheet.jsx:565
+#: src/pages/list.jsx:388
+msgid "Remove…"
+msgstr "Kendu…"
+
+#: src/components/edit-profile-sheet.jsx:481
 msgid "Profile picture"
 msgstr "Profileko irudia"
 
-#: src/components/edit-profile-sheet.jsx:260
+#: src/components/edit-profile-sheet.jsx:554
+msgid "Remove profile picture?"
+msgstr ""
+
+#: src/components/edit-profile-sheet.jsx:574
 #: src/components/list-add-edit.jsx:106
 msgid "Name"
 msgstr "Izena"
 
-#: src/components/edit-profile-sheet.jsx:274
+#: src/components/edit-profile-sheet.jsx:590
 msgid "Bio"
 msgstr "Biografia"
 
-#: src/components/edit-profile-sheet.jsx:287
-msgid "Extra fields"
-msgstr "Eremu gehigarriak"
+#: src/components/edit-profile-sheet.jsx:607
+msgid "Custom fields"
+msgstr ""
 
-#: src/components/edit-profile-sheet.jsx:293
+#: src/components/edit-profile-sheet.jsx:613
 msgid "Label"
 msgstr "Etiketa"
 
-#: src/components/edit-profile-sheet.jsx:296
+#: src/components/edit-profile-sheet.jsx:616
 msgid "Content"
 msgstr "Edukia"
 
-#: src/components/edit-profile-sheet.jsx:329
+#: src/components/edit-profile-sheet.jsx:678
+msgid "Add field"
+msgstr ""
+
+#: src/components/edit-profile-sheet.jsx:695
 #: src/components/list-add-edit.jsx:152
 #: src/components/quote-settings-sheet.jsx:92
 #: src/components/shortcuts-settings.jsx:732
 #: src/pages/filters.jsx:572
-#: src/pages/notifications.jsx:1122
+#: src/pages/notifications.jsx:1142
 msgid "Save"
 msgstr "Gorde"
 
@@ -814,7 +913,7 @@ msgid "No featured profiles."
 msgstr "Ez dago nabarmendutako profilik."
 
 #: src/components/follow-request-buttons.jsx:45
-#: src/pages/notifications.jsx:1106
+#: src/pages/notifications.jsx:1126
 msgid "Accept"
 msgstr "Onartu"
 
@@ -823,7 +922,7 @@ msgid "Reject"
 msgstr "Ukatu"
 
 #: src/components/follow-request-buttons.jsx:79
-#: src/pages/notifications.jsx:1392
+#: src/pages/notifications.jsx:1412
 msgid "Accepted"
 msgstr "Onartuta"
 
@@ -832,7 +931,7 @@ msgid "Rejected"
 msgstr "Ukatuta"
 
 #: src/components/generic-accounts.jsx:154
-#: src/components/notification.jsx:481
+#: src/components/notification.jsx:483
 #: src/pages/accounts.jsx:51
 #: src/pages/search.jsx:349
 #: src/pages/search.jsx:382
@@ -843,9 +942,9 @@ msgstr "Kontuak"
 #: src/components/quotes-modal.jsx:129
 #: src/components/timeline.jsx:621
 #: src/pages/list.jsx:321
-#: src/pages/notifications.jsx:1036
+#: src/pages/notifications.jsx:1056
 #: src/pages/search.jsx:576
-#: src/pages/status.jsx:1705
+#: src/pages/status.jsx:1717
 msgid "Show more…"
 msgstr "Erakutsi gehiago…"
 
@@ -939,7 +1038,7 @@ msgid "<0>{key1}</0> then <1>{key2}</1>"
 msgstr "<0>{key1}</0> orduan <1>{key2}</1>"
 
 #: src/components/keyboard-shortcuts-help.jsx:57
-#: src/components/nav-menu.jsx:374
+#: src/components/nav-menu.jsx:380
 #: src/pages/catchup.jsx:1769
 msgid "Keyboard shortcuts"
 msgstr "Laster-teklak"
@@ -1062,9 +1161,9 @@ msgid "<0>l</0> or <1>f</1>"
 msgstr "<0>l</0> edo <1>f</1>"
 
 #: src/components/keyboard-shortcuts-help.jsx:186
-#: src/components/status.jsx:1195
-#: src/components/status.jsx:2968
-#: src/components/status.jsx:3034
+#: src/components/status.jsx:1198
+#: src/components/status.jsx:2991
+#: src/components/status.jsx:3057
 msgid "Boost"
 msgstr "Bultzatu"
 
@@ -1073,9 +1172,9 @@ msgid "<0>Shift</0> + <1>b</1>"
 msgstr "<0>Shift</0> + <1>b</1>"
 
 #: src/components/keyboard-shortcuts-help.jsx:198
-#: src/components/status.jsx:1298
-#: src/components/status.jsx:3066
-#: src/components/status.jsx:3067
+#: src/components/status.jsx:1301
+#: src/components/status.jsx:3089
+#: src/components/status.jsx:3090
 msgid "Bookmark"
 msgstr "Jarri laster-marka"
 
@@ -1173,56 +1272,32 @@ msgid "Format math"
 msgstr "Eman formatu matematikoa"
 
 #: src/components/media-alt-modal.jsx:48
-#: src/components/media.jsx:51
+#: src/components/media.jsx:52
 msgid "Media description"
 msgstr "Fitxategiaren deskribapena"
 
-#: src/components/media-alt-modal.jsx:55
-#: src/components/media-attachment.jsx:460
-#: src/components/media-modal.jsx:372
-#: src/components/related-actions.jsx:273
-#: src/components/status.jsx:2203
-#: src/components/status.jsx:2220
-#: src/components/status.jsx:2352
-#: src/components/status.jsx:3090
-#: src/components/status.jsx:3093
-#: src/pages/account-statuses.jsx:641
-#: src/pages/accounts.jsx:149
-#: src/pages/hashtag.jsx:232
-#: src/pages/list.jsx:171
-#: src/pages/public.jsx:147
-#: src/pages/scheduled-posts.jsx:89
-#: src/pages/status.jsx:1572
-#: src/pages/trending.jsx:474
-msgid "More"
-msgstr "Gehiago"
-
 #: src/components/media-alt-modal.jsx:67
-#: src/components/status.jsx:1365
-#: src/components/status.jsx:1374
+#: src/components/status.jsx:1368
+#: src/components/status.jsx:1377
 #: src/components/translation-block.jsx:270
 msgid "Translate"
 msgstr "Itzuli"
 
 #: src/components/media-alt-modal.jsx:78
-#: src/components/status.jsx:1395
+#: src/components/status.jsx:1398
 msgid "Speak"
 msgstr "Irakurri ozenki"
 
-#: src/components/media-attachment.jsx:228
+#: src/components/media-attachment.jsx:229
 msgid "Uploaded"
 msgstr "Igota"
 
-#: src/components/media-attachment.jsx:241
-msgid "Image description"
-msgstr "Irudiaren deskribapena"
-
-#: src/components/media-attachment.jsx:242
 #: src/components/media-attachment.jsx:243
+#: src/components/media-attachment.jsx:244
 msgid "Video description"
 msgstr "Bideoaren deskribapena"
 
-#: src/components/media-attachment.jsx:244
+#: src/components/media-attachment.jsx:245
 msgid "Audio description"
 msgstr "Audioaren deskribapena"
 
@@ -1230,73 +1305,73 @@ msgstr "Audioaren deskribapena"
 #. placeholder {0}: prettyBytes( videoSize, )
 #. placeholder {1}: prettyBytes(imageSizeLimit)
 #. placeholder {1}: prettyBytes(videoSizeLimit)
-#: src/components/media-attachment.jsx:279
-#: src/components/media-attachment.jsx:299
+#: src/components/media-attachment.jsx:280
+#: src/components/media-attachment.jsx:302
 msgid "File size too large. Uploading might encounter issues. Try reduce the file size from {0} to {1} or lower."
 msgstr "Fitxategia handiegia da. Igoerak arazoak izan ditzake. Saiatu tamaina {0}tik {1} edo gutxiagora murrizten."
 
-#. placeholder {0}: i18n.number( width, )
-#. placeholder {1}: i18n.number(height)
-#. placeholder {2}: i18n.number(newWidth)
-#. placeholder {3}: i18n.number( newHeight, )
-#: src/components/media-attachment.jsx:291
-#: src/components/media-attachment.jsx:311
+#. placeholder {0}: NF( i18n.locale, ).format( width, )
+#. placeholder {1}: NF(i18n.locale).format(height)
+#. placeholder {2}: NF(i18n.locale).format(newWidth)
+#. placeholder {3}: NF( i18n.locale, ).format(newHeight)
+#: src/components/media-attachment.jsx:292
+#: src/components/media-attachment.jsx:314
 msgid "Dimension too large. Uploading might encounter issues. Try reduce dimension from {0}×{1}px to {2}×{3}px."
 msgstr "Neurria handiegia da. Igoerak arazoak izan ditzake. Saiatu neurria {0}×{1}px-etik {2}×{3}px-era murrizten."
 
-#: src/components/media-attachment.jsx:319
+#: src/components/media-attachment.jsx:324
 msgid "Frame rate too high. Uploading might encounter issues."
 msgstr "Fotograma-tasa (frame rate) altuegia da. Igoerak arazoak izan ditzake."
 
-#: src/components/media-attachment.jsx:396
+#: src/components/media-attachment.jsx:401
 #: src/compose.jsx:89
 msgid "Error"
 msgstr "Errorea"
 
-#: src/components/media-attachment.jsx:421
+#: src/components/media-attachment.jsx:426
 msgid "Edit image description"
 msgstr "Editatu irudiaren deskribapena"
 
-#: src/components/media-attachment.jsx:422
-#: src/components/media-attachment.jsx:423
+#: src/components/media-attachment.jsx:427
+#: src/components/media-attachment.jsx:428
 msgid "Edit video description"
 msgstr "Editatu bideoaren deskribapena"
 
-#: src/components/media-attachment.jsx:424
+#: src/components/media-attachment.jsx:429
 msgid "Edit audio description"
 msgstr "Editatu audioaren deskribapena"
 
-#: src/components/media-attachment.jsx:469
-#: src/components/media-attachment.jsx:518
+#: src/components/media-attachment.jsx:474
+#: src/components/media-attachment.jsx:528
 msgid "Generating description. Please wait…"
 msgstr "Deskribapena sortzen. Itxaron…"
 
 #. placeholder {0}: e.message
-#: src/components/media-attachment.jsx:489
+#: src/components/media-attachment.jsx:499
 msgid "Failed to generate description: {0}"
 msgstr "Ezin izan da deskribapena sortu: {0}"
 
-#: src/components/media-attachment.jsx:490
+#: src/components/media-attachment.jsx:500
 msgid "Failed to generate description"
 msgstr "Ezin izan da deskribapena sortu"
 
-#: src/components/media-attachment.jsx:502
-#: src/components/media-attachment.jsx:508
-#: src/components/media-attachment.jsx:554
+#: src/components/media-attachment.jsx:512
+#: src/components/media-attachment.jsx:518
+#: src/components/media-attachment.jsx:571
 msgid "Generate description…"
 msgstr "Sortu deskribapena…"
 
 #. placeholder {0}: e?.message ? `: ${e.message}` : ''
-#: src/components/media-attachment.jsx:541
+#: src/components/media-attachment.jsx:558
 msgid "Failed to generate description{0}"
 msgstr "Ezin izan da deskribapena sortu{0}"
 
 #. placeholder {0}: localeCode2Text(lang)
-#: src/components/media-attachment.jsx:556
+#: src/components/media-attachment.jsx:573
 msgid "({0}) <0>— experimental</0>"
 msgstr "({0}) <0>— esperimentala</0>"
 
-#: src/components/media-attachment.jsx:575
+#: src/components/media-attachment.jsx:592
 msgid "Done"
 msgstr "Eginda"
 
@@ -1333,16 +1408,16 @@ msgid "Filtered: {filterTitleStr}"
 msgstr "Iragazita: {filterTitleStr}"
 
 #: src/components/media-post.jsx:133
-#: src/components/status-compact.jsx:73
-#: src/components/status.jsx:3595
-#: src/components/status.jsx:3673
+#: src/components/status-compact.jsx:74
+#: src/components/status.jsx:3618
+#: src/components/status.jsx:3696
 #: src/components/timeline.jsx:1054
 #: src/pages/catchup.jsx:79
 #: src/pages/catchup.jsx:2052
 msgid "Filtered"
 msgstr "Iragazita"
 
-#: src/components/media.jsx:511
+#: src/components/media.jsx:532
 msgid "Open file"
 msgstr "Ireki fitxategia"
 
@@ -1404,8 +1479,8 @@ msgstr "Zer berri?"
 #: src/pages/home.jsx:255
 #: src/pages/mentions.jsx:25
 #: src/pages/mentions.jsx:256
-#: src/pages/notifications.jsx:913
-#: src/pages/settings.jsx:1295
+#: src/pages/notifications.jsx:933
+#: src/pages/settings.jsx:1343
 #: src/pages/trending.jsx:384
 msgid "Mentions"
 msgstr "Aipamenak"
@@ -1417,7 +1492,7 @@ msgstr "Aipamenak"
 #: src/pages/home.jsx:101
 #: src/pages/home.jsx:213
 #: src/pages/notifications.jsx:112
-#: src/pages/notifications.jsx:693
+#: src/pages/notifications.jsx:713
 msgid "Notifications"
 msgstr "Jakinarazpenak"
 
@@ -1451,7 +1526,7 @@ msgstr "Gehiago…"
 #: src/pages/catchup.jsx:2255
 #: src/pages/favourites.jsx:12
 #: src/pages/favourites.jsx:26
-#: src/pages/settings.jsx:1299
+#: src/pages/settings.jsx:1347
 msgid "Likes"
 msgstr "Gogokoak"
 
@@ -1462,7 +1537,7 @@ msgid "Followed Hashtags"
 msgstr "Jarraitutako traolak"
 
 #: src/components/nav-menu.jsx:279
-#: src/pages/account-statuses.jsx:382
+#: src/pages/account-statuses.jsx:410
 #: src/pages/filters.jsx:55
 #: src/pages/filters.jsx:94
 #: src/pages/hashtag.jsx:373
@@ -1492,34 +1567,34 @@ msgstr "Kontuak…"
 #: src/components/nav-menu.jsx:332
 #: src/pages/login.jsx:33
 #: src/pages/login.jsx:227
-#: src/pages/status.jsx:1101
+#: src/pages/status.jsx:1110
 #: src/pages/welcome.jsx:63
 msgid "Log in"
 msgstr "Hasi saioa"
 
-#: src/components/nav-menu.jsx:349
+#: src/components/nav-menu.jsx:350
 #: src/components/shortcuts-settings.jsx:59
 #: src/components/shortcuts-settings.jsx:175
 #: src/pages/trending.jsx:444
 msgid "Trending"
 msgstr "Joerak"
 
-#: src/components/nav-menu.jsx:361
+#: src/components/nav-menu.jsx:366
 #: src/components/shortcuts-settings.jsx:168
 msgid "Federated"
 msgstr "Federatua"
 
-#: src/components/nav-menu.jsx:384
+#: src/components/nav-menu.jsx:390
 msgid "Shortcuts / Columns…"
 msgstr "Lasterbideak / Zutabeak…"
 
-#: src/components/nav-menu.jsx:394
-#: src/components/nav-menu.jsx:408
+#: src/components/nav-menu.jsx:400
+#: src/components/nav-menu.jsx:414
 msgid "Settings…"
 msgstr "Ezarpenak…"
 
-#: src/components/nav-menu.jsx:438
-#: src/components/nav-menu.jsx:473
+#: src/components/nav-menu.jsx:444
+#: src/components/nav-menu.jsx:479
 #: src/components/shortcuts-settings.jsx:52
 #: src/components/shortcuts-settings.jsx:161
 #: src/pages/list.jsx:127
@@ -1528,7 +1603,7 @@ msgstr "Ezarpenak…"
 msgid "Lists"
 msgstr "Zerrendak"
 
-#: src/components/nav-menu.jsx:446
+#: src/components/nav-menu.jsx:452
 #: src/components/shortcuts.jsx:32
 #: src/pages/list.jsx:139
 msgid "All Lists"
@@ -1546,172 +1621,172 @@ msgstr "Jakinarazpena zure beste kontuarena da."
 msgid "View all notifications"
 msgstr "Ikusi jakinarazpen guztiak"
 
-#: src/components/notification.jsx:75
+#: src/components/notification.jsx:76
 msgid "{account} reacted to your post with {emojiObject}"
 msgstr "{account}(e)k zure bidalketari {emojiObject}rekin erantzun dio"
 
-#: src/components/notification.jsx:82
+#: src/components/notification.jsx:83
 msgid "{account} published a post."
 msgstr "{account}(e)k bidalketa bat argitaratu du"
 
 #. placeholder {0}: shortenNumber(count)
 #. placeholder {1}: shortenNumber(count)
-#: src/components/notification.jsx:90
+#: src/components/notification.jsx:91
 msgid "{count, plural, =1 {{postsCount, plural, =1 {{postType, select, reply {{account} boosted your reply.} other {{account} boosted your post.}}} other {{account} boosted {postsCount} of your posts.}}} other {{postType, select, reply {<0><1>{0}</1> people</0> boosted your reply.} other {<2><3>{1}</3> people</2> boosted your post.}}}}"
 msgstr "{count, plural, =1 {{postsCount, plural, =1 {{postType, select, reply {{account}(e)k zure erantzuna bultzatu du.} other {{account}(e)k zure bidalketa bultzatu du.}}} other {{account}(e)k zure {postsCount} bidalketa bultzatu ditu.}}} other {{postType, select, reply {<0><1>{0}</1> pertsonak</0> zure erantzuna bultzatu dute.} other {<2><3>{1}</3> pertsonak</2> zure bidalketa bultzatu dute.}}}}"
 
 #. placeholder {0}: shortenNumber(count)
-#: src/components/notification.jsx:133
+#: src/components/notification.jsx:134
 msgid "{count, plural, =1 {{account} followed you.} other {<0><1>{0}</1> people</0> followed you.}}"
 msgstr "{count, plural, one {}=1 {{account}(e)k jarraitu dizu.} other {<0><1>{0}</1> pertsonak</0> jarraitu dizute.}}"
 
-#: src/components/notification.jsx:147
+#: src/components/notification.jsx:148
 msgid "{account} requested to follow you."
 msgstr "{account}(e)k jarraitzeko eskaera egin dizu."
 
 #. placeholder {0}: shortenNumber(count)
 #. placeholder {1}: shortenNumber(count)
-#: src/components/notification.jsx:156
+#: src/components/notification.jsx:157
 msgid "{count, plural, =1 {{postsCount, plural, =1 {{postType, select, reply {{account} liked your reply.} other {{account} liked your post.}}} other {{account} liked {postsCount} of your posts.}}} other {{postType, select, reply {<0><1>{0}</1> people</0> liked your reply.} other {<2><3>{1}</3> people</2> liked your post.}}}}"
 msgstr "{count, plural, =1 {{postsCount, plural, =1 {{postType, select, reply {{account}(e)k zure erantzuna gogoko du.} other {{account}(e)k zure bidalketa gogoko du.}}} other {{account}(e)k zure {postsCount} bidalketa gogoko ditu.}}} other {{postType, select, reply {<0><1>{0}</1> pertsonak</0> zure erantzuna gogoko dute.} other {<2><3>{1}</3> pertsonak</2> zure bidalketa gogoko dute.}}}}"
 
-#: src/components/notification.jsx:198
+#: src/components/notification.jsx:199
 msgid "A poll you have voted in or created has ended."
 msgstr "Sortu edo boza eman zenuen bozketa bat amaitu da."
 
-#: src/components/notification.jsx:199
+#: src/components/notification.jsx:200
 msgid "A poll you have created has ended."
 msgstr "Sortu zenuen bozketa bat amaitu da."
 
-#: src/components/notification.jsx:200
+#: src/components/notification.jsx:201
 msgid "A poll you have voted in has ended."
 msgstr "Boza eman zenuen bozketa bat amaitu da."
 
-#: src/components/notification.jsx:203
+#: src/components/notification.jsx:204
 msgid "{account} edited a post."
 msgstr "{account}(e)k bidalketa bat editatu du."
 
-#: src/components/notification.jsx:205
+#: src/components/notification.jsx:206
 msgid "A post you interacted with has been edited."
 msgstr "Interaktuatu zenuen bidalketa bat editatu dute."
 
 #. placeholder {0}: shortenNumber(count)
 #. placeholder {1}: shortenNumber(count)
-#: src/components/notification.jsx:214
+#: src/components/notification.jsx:215
 msgid "{count, plural, =1 {{postsCount, plural, =1 {{postType, select, reply {{account} boosted & liked your reply.} other {{account} boosted & liked your post.}}} other {{account} boosted & liked {postsCount} of your posts.}}} other {{postType, select, reply {<0><1>{0}</1> people</0> boosted & liked your reply.} other {<2><3>{1}</3> people</2> boosted & liked your post.}}}}"
 msgstr "{count, plural, =1 {{postsCount, plural, =1 {{postType, select, reply {{account}(e)ek zure erantzuna gogoko egin eta bultzatu du.} other {{account}(e)ek zure bidalketa gogoko egin eta bultzatu du.}}} other {{account}(e)k (e)ek zure  {postsCount} bidalketa gogoko egin eta bultzatu ditu.}}} other {{postType, select, reply {<0><1>{0}</1> pertsonak</0> erantzuna gogoko egin eta bultzatu dute.} other {<2><3>{1}</3> pertsonak</2> zure bidalketa gogoko egin eta bultzatu dute.}}}}"
 
-#: src/components/notification.jsx:257
+#: src/components/notification.jsx:258
 msgid "{account} edited a post you have quoted."
 msgstr "{account}(e)k iruzkindu duzun bidalketa bat editatu du."
 
 #. placeholder {0}: shortenNumber(count)
-#: src/components/notification.jsx:260
+#: src/components/notification.jsx:261
 msgid "{count, plural, =1 {{account} signed up.} other {<0><1>{0}</1> people</0> signed up.}}"
 msgstr "{count, plural, one {}=1 {{account} izena eman du.} other {<0><1>{0}</1> pertsonak</0> izena eman dute.}}"
 
-#: src/components/notification.jsx:274
+#: src/components/notification.jsx:275
 msgid "{account} reported {targetAccount}"
 msgstr "{account}(e)k {targetAccount} salatu du"
 
-#: src/components/notification.jsx:279
+#: src/components/notification.jsx:280
 msgid "Lost connections with <0>{name}</0>."
 msgstr "<0>{name}</0>(r)ekin harremana galdu da."
 
-#: src/components/notification.jsx:285
+#: src/components/notification.jsx:286
 msgid "Moderation warning"
 msgstr "Moderazio-ohartarazpena"
 
-#: src/components/notification.jsx:290
+#: src/components/notification.jsx:292
 msgid "Your {year} #Wrapstodon is here!"
 msgstr "Hemen da {year}ko #Wrapstodon!"
 
-#: src/components/notification.jsx:296
+#: src/components/notification.jsx:298
 msgid "An admin from <0>{from}</0> has suspended <1>{targetName}</1>, which means you can no longer receive updates from them or interact with them."
 msgstr "<0>{from}</0>(e)ko administratzaile batek <1>{targetName}</1> bertan behera utzi du, eta horrek esan nahi du aurrerantzean ezingo duzula harekin harremanik izan."
 
-#: src/components/notification.jsx:302
+#: src/components/notification.jsx:304
 msgid "An admin from <0>{from}</0> has blocked <1>{targetName}</1>. Affected followers: {followersCount}, followings: {followingCount}."
 msgstr "<0>{from}</0>(e)ko administratzaile batek <1>{targetName}</1> blokeatu du. Eragina du jarraitzen dizuten {followersCount} eta jarraitzen dituzun {followingCount} -engan."
 
-#: src/components/notification.jsx:308
+#: src/components/notification.jsx:310
 msgid "You have blocked <0>{targetName}</0>. Removed followers: {followersCount}, followings: {followingCount}."
 msgstr "<0>{targetName}</0> blokeatu duzu. Jarraitzen zizuten {followersCount} eta jarraitzen zenituen {followingCount} kendu dira."
 
-#: src/components/notification.jsx:316
+#: src/components/notification.jsx:318
 msgid "Your account has received a moderation warning."
 msgstr "Zure kontuak moderazio-ohartarazpen bat jaso du."
 
-#: src/components/notification.jsx:317
+#: src/components/notification.jsx:319
 msgid "Your account has been disabled."
 msgstr "Zure kontua ezgaitu da."
 
-#: src/components/notification.jsx:318
+#: src/components/notification.jsx:320
 msgid "Some of your posts have been marked as sensitive."
 msgstr "Zure bidalketa batzuk hunkigarri gisa markatu dira."
 
-#: src/components/notification.jsx:319
+#: src/components/notification.jsx:321
 msgid "Some of your posts have been deleted."
 msgstr "Zure bidalketa batzuk ezabatu dira."
 
-#: src/components/notification.jsx:320
+#: src/components/notification.jsx:322
 msgid "Your posts will be marked as sensitive from now on."
 msgstr "Aurrerantzean zure bidalketak hunkigarri gisa markatuko dira."
 
-#: src/components/notification.jsx:321
+#: src/components/notification.jsx:323
 msgid "Your account has been limited."
 msgstr "Zure kontuari mugak jarri zaizkio."
 
-#: src/components/notification.jsx:322
+#: src/components/notification.jsx:324
 msgid "Your account has been suspended."
 msgstr "Zure kontua bertan behera utzi da."
 
-#: src/components/notification.jsx:399
+#: src/components/notification.jsx:401
 msgid "[Unknown notification type: {type}]"
 msgstr "[Jakinarazpen mota ezezaguna: {type}]"
 
-#: src/components/notification.jsx:477
-#: src/components/status.jsx:1312
-#: src/components/status.jsx:1322
+#: src/components/notification.jsx:479
+#: src/components/status.jsx:1315
+#: src/components/status.jsx:1325
 msgid "Boosted/Liked by…"
 msgstr "Bultzatu/Gogoko du(te)…"
 
-#: src/components/notification.jsx:478
+#: src/components/notification.jsx:480
 msgid "Liked by…"
 msgstr "Gogoko du…"
 
-#: src/components/notification.jsx:479
+#: src/components/notification.jsx:481
 msgid "Boosted by…"
 msgstr "Bultzatu du…"
 
-#: src/components/notification.jsx:480
+#: src/components/notification.jsx:482
 msgid "Followed by…"
 msgstr "Jarraitzen dizu…"
 
-#: src/components/notification.jsx:624
-#: src/components/notification.jsx:640
+#: src/components/notification.jsx:626
+#: src/components/notification.jsx:642
 msgid "Learn more <0/>"
 msgstr "Ikasi gehiago <0/>"
 
-#: src/components/notification.jsx:649
+#: src/components/notification.jsx:651
 msgid "View #Wrapstodon"
 msgstr "Ikusi #Wrapstodon"
 
-#: src/components/notification.jsx:847
+#: src/components/notification.jsx:849
 #: src/components/quote-chain-modal.jsx:18
-#: src/components/status.jsx:261
+#: src/components/status.jsx:263
 msgid "Read more →"
 msgstr "Irakurri gehiago →"
 
 #: src/components/open-link-sheet.jsx:30
-#: src/components/related-actions.jsx:556
-#: src/components/status.jsx:1486
+#: src/components/related-actions.jsx:539
+#: src/components/status.jsx:1489
 msgid "Link copied"
 msgstr "Esteka kopiatu da"
 
 #: src/components/open-link-sheet.jsx:33
-#: src/components/related-actions.jsx:559
-#: src/components/status.jsx:1489
+#: src/components/related-actions.jsx:542
+#: src/components/status.jsx:1492
 msgid "Unable to copy link"
 msgstr "Ezin da esteka kopiatu"
 
@@ -1721,15 +1796,15 @@ msgstr "Esteka ireki?"
 
 #: src/components/open-link-sheet.jsx:78
 #: src/components/post-embed-modal.jsx:232
-#: src/components/related-actions.jsx:565
+#: src/components/related-actions.jsx:548
 #: src/components/shortcuts-settings.jsx:1175
-#: src/components/status.jsx:1495
+#: src/components/status.jsx:1498
 msgid "Copy"
 msgstr "Kopiatu"
 
 #: src/components/open-link-sheet.jsx:82
-#: src/components/related-actions.jsx:586
-#: src/components/status.jsx:1517
+#: src/components/related-actions.jsx:569
+#: src/components/status.jsx:1520
 msgid "Share…"
 msgstr "Partekatu…"
 
@@ -1802,13 +1877,13 @@ msgstr "Erakutsi emaitzak"
 #: src/components/poll.jsx:411
 #: src/components/poll.jsx:413
 #: src/pages/scheduled-posts.jsx:100
-#: src/pages/status.jsx:1561
-#: src/pages/status.jsx:1584
+#: src/pages/status.jsx:1574
+#: src/pages/status.jsx:1597
 msgid "Refresh"
 msgstr "Freskatu"
 
 #: src/components/post-embed-modal.jsx:201
-#: src/components/status.jsx:1530
+#: src/components/status.jsx:1533
 msgid "Embed post"
 msgstr "Txertatu bidalketa"
 
@@ -1959,7 +2034,6 @@ msgid "Clear all"
 msgstr "Garbitu guztia"
 
 #: src/components/recent-searches.jsx:94
-#: src/pages/account-statuses.jsx:375
 msgid "Clear"
 msgstr "Garbitu"
 
@@ -1980,183 +2054,183 @@ msgstr "Mutututa"
 msgid "Blocked"
 msgstr "Blokeatuta"
 
-#: src/components/related-actions.jsx:306
+#: src/components/related-actions.jsx:289
 msgid "Mention <0>@{username}</0>"
 msgstr "Aipatu <0>@{username}</0>"
 
-#: src/components/related-actions.jsx:319
+#: src/components/related-actions.jsx:302
 msgid "Search <0>@{username}</0>'s posts"
 msgstr "Bilatu <0>@{username}</0>(r)en bidalketetan"
 
-#: src/components/related-actions.jsx:333
+#: src/components/related-actions.jsx:316
 msgid "Translate bio"
 msgstr "Itzuli biografia"
 
-#: src/components/related-actions.jsx:343
+#: src/components/related-actions.jsx:326
 msgid "Edit notes"
 msgstr "Editatu oharra"
 
-#: src/components/related-actions.jsx:343
+#: src/components/related-actions.jsx:326
 msgid "Add notes"
 msgstr "Gehitu oharra"
 
-#: src/components/related-actions.jsx:362
+#: src/components/related-actions.jsx:345
 msgid "Notifications enabled for @{username}'s posts."
 msgstr "Jakinarazpenak gaitu dira @{username}(r)en bidalketetarako."
 
-#: src/components/related-actions.jsx:363
+#: src/components/related-actions.jsx:346
 msgid " Notifications disabled for @{username}'s posts."
 msgstr " Jakinarazpenak gaitu dira @{username}(r)en bidalketetarako."
 
-#: src/components/related-actions.jsx:375
+#: src/components/related-actions.jsx:358
 msgid "Disable notifications"
 msgstr "Ezgaitu jakinarazpenak"
 
-#: src/components/related-actions.jsx:376
+#: src/components/related-actions.jsx:359
 msgid "Enable notifications"
 msgstr "Gaitu jakinarazpenak"
 
-#: src/components/related-actions.jsx:393
+#: src/components/related-actions.jsx:376
 msgid "Boosts from @{username} enabled."
 msgstr "@{username}(r)en bultzadak gaitu dira."
 
-#: src/components/related-actions.jsx:394
+#: src/components/related-actions.jsx:377
 msgid "Boosts from @{username} disabled."
 msgstr "@{username}(r)en bultzadak ezgaitu dira."
 
-#: src/components/related-actions.jsx:405
+#: src/components/related-actions.jsx:388
 msgid "Disable boosts"
 msgstr "Ezgaitu bultzadak"
 
-#: src/components/related-actions.jsx:405
+#: src/components/related-actions.jsx:388
 msgid "Enable boosts"
 msgstr "Gaitu bultzadak"
 
-#: src/components/related-actions.jsx:424
+#: src/components/related-actions.jsx:407
 msgid "@{username} is no longer featured on your profile."
 msgstr "@{username} zure profilean nabarmentzeari utzi zaio."
 
-#: src/components/related-actions.jsx:434
+#: src/components/related-actions.jsx:417
 msgid "@{username} is now featured on your profile."
 msgstr "@{username} zure profilean nabarmenduta dago."
 
-#: src/components/related-actions.jsx:442
+#: src/components/related-actions.jsx:425
 msgid "Unable to unfeature @{username} on your profile."
 msgstr "Ezin da @{username} zure profilean nabarmentzeari utzi."
 
-#: src/components/related-actions.jsx:446
+#: src/components/related-actions.jsx:429
 msgid "Unable to feature @{username} on your profile."
 msgstr "Ezin da @{username} zure profilean nabarmendu."
 
-#: src/components/related-actions.jsx:455
+#: src/components/related-actions.jsx:438
 msgid "Don't feature on profile"
 msgstr "Ez nabarmendu profilean"
 
-#: src/components/related-actions.jsx:456
+#: src/components/related-actions.jsx:439
 #: src/pages/hashtag.jsx:362
 msgid "Feature on profile"
 msgstr "Nabarmendu profilean"
 
-#: src/components/related-actions.jsx:465
-#: src/components/related-actions.jsx:515
+#: src/components/related-actions.jsx:448
+#: src/components/related-actions.jsx:498
 msgid "Show featured profiles"
 msgstr "Erakutsi nabarmendutako profilak"
 
-#: src/components/related-actions.jsx:507
-#: src/pages/account-statuses.jsx:546
+#: src/components/related-actions.jsx:490
+#: src/pages/account-statuses.jsx:578
 msgid "Search my posts"
 msgstr "Bilatu nire bidalketetan"
 
-#: src/components/related-actions.jsx:580
+#: src/components/related-actions.jsx:563
 #: src/components/shortcuts-settings.jsx:1193
-#: src/components/status.jsx:1511
+#: src/components/status.jsx:1514
 msgid "Sharing doesn't seem to work."
 msgstr "Ez dirudi partekatzea dabilenik."
 
-#: src/components/related-actions.jsx:622
+#: src/components/related-actions.jsx:605
 msgid "Unmuted @{username}"
 msgstr "@{username} mututzeari utzi zaio"
 
-#: src/components/related-actions.jsx:634
+#: src/components/related-actions.jsx:617
 msgid "Unmute <0>@{username}</0>"
 msgstr "Utzi <0>@{username}</0> mututzeari"
 
-#: src/components/related-actions.jsx:650
+#: src/components/related-actions.jsx:633
 msgid "Mute <0>@{username}</0>…"
 msgstr "Mututu <0>@{username}</0>…"
 
 #. placeholder {0}: typeof MUTE_DURATIONS_LABELS[duration] === 'function' ? MUTE_DURATIONS_LABELS[duration]() : _(MUTE_DURATIONS_LABELS[duration])
-#: src/components/related-actions.jsx:682
+#: src/components/related-actions.jsx:665
 msgid "Muted @{username} for {0}"
 msgstr "@{username} {0}rako mututu da"
 
-#: src/components/related-actions.jsx:694
+#: src/components/related-actions.jsx:677
 msgid "Unable to mute @{username}"
 msgstr "Ezin da @{username} mututu"
 
-#: src/components/related-actions.jsx:715
+#: src/components/related-actions.jsx:698
 msgid "Remove <0>@{username}</0> from followers?"
 msgstr "<0>@{username}</0> jarraitzaileetatik kendu nahi?"
 
-#: src/components/related-actions.jsx:735
+#: src/components/related-actions.jsx:718
 msgid "@{username} removed from followers"
 msgstr "@{username} jarraitzaileetatik kendu da"
 
-#: src/components/related-actions.jsx:747
+#: src/components/related-actions.jsx:730
 msgid "Remove follower…"
 msgstr "Kendu jarraitzailea…"
 
-#: src/components/related-actions.jsx:758
+#: src/components/related-actions.jsx:741
 msgid "Block <0>@{username}</0>?"
 msgstr "<0>@{username}</0> blokeatu nahi?"
 
-#: src/components/related-actions.jsx:782
+#: src/components/related-actions.jsx:765
 msgid "Unblocked @{username}"
 msgstr "@{username} blokeatzeari utzi zaio"
 
-#: src/components/related-actions.jsx:790
+#: src/components/related-actions.jsx:773
 msgid "Blocked @{username}"
 msgstr "@{username} blokeatu da"
 
-#: src/components/related-actions.jsx:798
+#: src/components/related-actions.jsx:781
 msgid "Unable to unblock @{username}"
 msgstr "Ezin da @{username} blokeatzeari utzi"
 
-#: src/components/related-actions.jsx:800
+#: src/components/related-actions.jsx:783
 msgid "Unable to block @{username}"
 msgstr "Ezin da @{username} blokeatu"
 
-#: src/components/related-actions.jsx:810
+#: src/components/related-actions.jsx:793
 msgid "Unblock <0>@{username}</0>"
 msgstr "Utzi <0>@{username}</0> blokeatzeari"
 
-#: src/components/related-actions.jsx:819
+#: src/components/related-actions.jsx:802
 msgid "Block <0>@{username}</0>…"
 msgstr "Blokeatu <0>@{username}</0>…"
 
-#: src/components/related-actions.jsx:836
+#: src/components/related-actions.jsx:819
 msgid "Report <0>@{username}</0>…"
 msgstr "Salatu <0>@{username}</0>…"
 
-#: src/components/related-actions.jsx:892
+#: src/components/related-actions.jsx:887
 msgid "Withdraw follow request?"
 msgstr "Jarraipen-eskaera atzera bota?"
 
 #. placeholder {0}: info.acct || info.username
-#: src/components/related-actions.jsx:893
+#: src/components/related-actions.jsx:888
 msgid "Unfollow @{0}?"
 msgstr "Utzi @{0} jarraitzeari?"
 
-#: src/components/related-actions.jsx:956
+#: src/components/related-actions.jsx:951
 msgid "Unfollow…"
 msgstr "Utzi jarraitzeari…"
 
-#: src/components/related-actions.jsx:965
+#: src/components/related-actions.jsx:960
 msgid "Withdraw…"
 msgstr "Bota atzera…"
 
-#: src/components/related-actions.jsx:972
-#: src/components/related-actions.jsx:976
+#: src/components/related-actions.jsx:967
+#: src/components/related-actions.jsx:971
 #: src/pages/hashtag.jsx:294
 msgid "Follow"
 msgstr "Jarraitu"
@@ -2395,18 +2469,8 @@ msgstr "Zutabe anitz"
 msgid "Not available in current view mode"
 msgstr "Ez dago erabilgarri uneko ikuspegian"
 
-#: src/components/shortcuts-settings.jsx:368
-#: src/pages/accounts.jsx:219
-msgid "Move up"
-msgstr "Mugitu gora"
-
-#: src/components/shortcuts-settings.jsx:384
-#: src/pages/accounts.jsx:234
-msgid "Move down"
-msgstr "Mugitu behera"
-
 #: src/components/shortcuts-settings.jsx:396
-#: src/components/status.jsx:1644
+#: src/components/status.jsx:1647
 #: src/pages/list.jsx:195
 msgid "Edit"
 msgstr "Editatu"
@@ -2598,371 +2662,371 @@ msgstr "Lasterbideen JSON gordina"
 msgid "Import/export settings from/to server (Very experimental)"
 msgstr "Inportatu / Esportatu ezarpenak zerbitzarira / zerbitzaritik (oso esperimentala)"
 
-#: src/components/status.jsx:290
+#: src/components/status.jsx:292
 msgid "Private posts cannot be quoted"
 msgstr "Bidalketa pribatuak ezin dira iruzkindu"
 
-#: src/components/status.jsx:291
+#: src/components/status.jsx:293
 msgid "Request to quote"
 msgstr "Iruzkintzeko eskaerak"
 
-#: src/components/status.jsx:292
+#: src/components/status.jsx:294
 msgid "Author will manually review"
 msgstr "Egileak eskuz berrikusiko du"
 
-#: src/components/status.jsx:293
+#: src/components/status.jsx:295
 msgid "Only followers can quote this post"
 msgstr "Jarraitzaileek soilik iruzkindu dezakete bidalketa hau"
 
-#: src/components/status.jsx:294
+#: src/components/status.jsx:296
 msgid "You are not allowed to quote this post"
 msgstr "Ez duzu bidalketa hau iruzkintzeko baimenik"
 
-#: src/components/status.jsx:370
-#: src/components/status.jsx:3235
-#: src/components/status.jsx:3236
-#: src/components/status.jsx:3237
+#: src/components/status.jsx:372
+#: src/components/status.jsx:3258
+#: src/components/status.jsx:3259
+#: src/components/status.jsx:3260
 msgid "Post unavailable"
 msgstr "Bidalketa ez dago eskuragarri"
 
-#: src/components/status.jsx:631
+#: src/components/status.jsx:634
 msgid "<0/> <1>boosted</1>"
 msgstr "<0/>(e)k <1>bultzatua</1>"
 
-#: src/components/status.jsx:738
+#: src/components/status.jsx:741
 msgid "Sorry, your current logged-in server can't interact with this post from another server."
 msgstr "Barka baina saioa hasita duzun zerbitzariak ezin du interaktuatu beste zerbitzari batekoa den bidalketa honekin."
 
 #. placeholder {0}: username || acct
-#: src/components/status.jsx:928
+#: src/components/status.jsx:931
 msgid "Unliked @{0}'s post"
 msgstr "@{0}(r)en bidalketa gogoko izateari utzi diozu"
 
 #. placeholder {0}: username || acct
-#: src/components/status.jsx:929
+#: src/components/status.jsx:932
 msgid "Liked @{0}'s post"
 msgstr "@{0}(r)en bidalketa gogoko egin du"
 
 #. placeholder {0}: username || acct
-#: src/components/status.jsx:969
+#: src/components/status.jsx:972
 msgid "Unbookmarked @{0}'s post"
 msgstr "@{0}(r)en bidalketari laster-marka kendu dio"
 
 #. placeholder {0}: username || acct
-#: src/components/status.jsx:970
+#: src/components/status.jsx:973
 msgid "Bookmarked @{0}'s post"
 msgstr "@{0}(r)en bidalketari laster-marka jarri dio"
 
-#: src/components/status.jsx:1074
+#: src/components/status.jsx:1077
 msgid "Some media have no descriptions."
 msgstr "Multimedia fitxategi batzuek ez dute deskribapenik."
 
 #. placeholder {0}: rtf.format(-statusMonthsAgo, 'month')
-#: src/components/status.jsx:1081
+#: src/components/status.jsx:1084
 msgid "Old post (<0>{0}</0>)"
 msgstr "Bidalketa zaharra (<0>{0}</0>)"
 
-#: src/components/status.jsx:1102
+#: src/components/status.jsx:1105
 msgid "Reply…"
 msgstr "Erantzun…"
 
-#: src/components/status.jsx:1116
-#: src/components/status.jsx:1130
+#: src/components/status.jsx:1119
+#: src/components/status.jsx:1133
 msgid "Reply all"
 msgstr "Erantzun guztiei"
 
-#: src/components/status.jsx:1119
+#: src/components/status.jsx:1122
 msgid "{mentionsCount, plural, other {# mentions}}"
 msgstr "{mentionsCount, plural, one {}other {# aipamen}}"
 
 #. placeholder {0}: mentionsCount - 1
 #. placeholder {1}: username || acct
-#: src/components/status.jsx:1133
+#: src/components/status.jsx:1136
 msgid "{0, plural, other {<0>@{1}</0> first, # others below}}"
 msgstr "{0, plural, one {}other {<0>@{1}</0> lehena, beste # beherago}}"
 
 #. placeholder {0}: username || acct
-#: src/components/status.jsx:1155
+#: src/components/status.jsx:1158
 msgid "Only <0>@{0}</0>"
 msgstr "<0>@{0}</0> bakarrik"
 
-#: src/components/status.jsx:1195
-#: src/components/status.jsx:1273
-#: src/components/status.jsx:2968
-#: src/components/status.jsx:3032
+#: src/components/status.jsx:1198
+#: src/components/status.jsx:1276
+#: src/components/status.jsx:2991
+#: src/components/status.jsx:3055
 msgid "Unboost"
 msgstr "Kendu bultzada"
 
-#: src/components/status.jsx:1234
-#: src/components/status.jsx:3017
+#: src/components/status.jsx:1237
+#: src/components/status.jsx:3040
 msgid "Quote with link"
 msgstr "Iruzkindu estekarekin"
 
 #. placeholder {0}: username || acct
-#: src/components/status.jsx:1252
-#: src/components/status.jsx:1845
+#: src/components/status.jsx:1255
+#: src/components/status.jsx:1848
 msgid "Unboosted @{0}'s post"
 msgstr "@{0}(r)en bidalketari bultzada kendu dio"
 
 #. placeholder {0}: username || acct
-#: src/components/status.jsx:1253
-#: src/components/status.jsx:1846
+#: src/components/status.jsx:1256
+#: src/components/status.jsx:1849
 msgid "Boosted @{0}'s post"
 msgstr "@{0}(r)en bidalketa bultzatu du"
 
-#: src/components/status.jsx:1275
-#: src/components/status.jsx:3031
+#: src/components/status.jsx:1278
+#: src/components/status.jsx:3054
 msgid "Boost/Quote…"
 msgstr "Bultzatu/Iruzkindu…"
 
-#: src/components/status.jsx:1276
-#: src/components/status.jsx:3031
+#: src/components/status.jsx:1279
+#: src/components/status.jsx:3054
 msgid "Boost…"
 msgstr "Bultzatu…"
 
-#: src/components/status.jsx:1288
-#: src/components/status.jsx:2193
-#: src/components/status.jsx:3051
+#: src/components/status.jsx:1291
+#: src/components/status.jsx:2201
+#: src/components/status.jsx:3074
 msgid "Unlike"
 msgstr "Utzi gogoko egiteari"
 
-#: src/components/status.jsx:1289
-#: src/components/status.jsx:2193
-#: src/components/status.jsx:2194
-#: src/components/status.jsx:3051
-#: src/components/status.jsx:3052
+#: src/components/status.jsx:1292
+#: src/components/status.jsx:2201
+#: src/components/status.jsx:2202
+#: src/components/status.jsx:3074
+#: src/components/status.jsx:3075
 msgid "Like"
 msgstr "Gogoko egin"
 
-#: src/components/status.jsx:1298
-#: src/components/status.jsx:3066
+#: src/components/status.jsx:1301
+#: src/components/status.jsx:3089
 msgid "Unbookmark"
 msgstr "Kendu laster-marka"
 
-#: src/components/status.jsx:1333
+#: src/components/status.jsx:1336
 msgid "View Quotes"
 msgstr "Ikusi iruzkinak"
 
-#: src/components/status.jsx:1345
+#: src/components/status.jsx:1348
 msgid "Unwrap quote chain"
 msgstr "Ireki aipuen katea"
 
-#: src/components/status.jsx:1412
+#: src/components/status.jsx:1415
 msgid "Post text copied"
 msgstr "Bidalketako testua kopiatu da"
 
-#: src/components/status.jsx:1415
+#: src/components/status.jsx:1418
 msgid "Unable to copy post text"
 msgstr "Ezin da bidalketako testua kopiatu"
 
-#: src/components/status.jsx:1421
+#: src/components/status.jsx:1424
 msgid "Copy post text"
 msgstr "Kopiatu bidalketako testua"
 
 #. placeholder {0}: username || acct
-#: src/components/status.jsx:1439
+#: src/components/status.jsx:1442
 msgid "View post by <0>@{0}</0>"
 msgstr "Ikusi <0>@{0}</0>(r)en bidalketa"
 
-#: src/components/status.jsx:1460
+#: src/components/status.jsx:1463
 msgid "Show Edit History"
 msgstr "Erakutsi edizio-historia"
 
-#: src/components/status.jsx:1463
+#: src/components/status.jsx:1466
 msgid "Edited: {editedDateText}"
 msgstr "Editatuta: {editedDateText}"
 
-#: src/components/status.jsx:1547
+#: src/components/status.jsx:1550
 msgid "Conversation unmuted"
 msgstr "Elkarrizketa mututzeari utzi zaio"
 
-#: src/components/status.jsx:1547
+#: src/components/status.jsx:1550
 msgid "Conversation muted"
 msgstr "Elkarrizketa mututu da"
 
-#: src/components/status.jsx:1553
+#: src/components/status.jsx:1556
 msgid "Unable to unmute conversation"
 msgstr "Ezin da elkarrizketa mututzeari utzi"
 
-#: src/components/status.jsx:1554
+#: src/components/status.jsx:1557
 msgid "Unable to mute conversation"
 msgstr "Ezin da elkarrizketa mututu"
 
-#: src/components/status.jsx:1563
+#: src/components/status.jsx:1566
 msgid "Unmute conversation"
 msgstr "Utzi elkarrizketa mututzeari"
 
-#: src/components/status.jsx:1570
+#: src/components/status.jsx:1573
 msgid "Mute conversation"
 msgstr "Mututu elkarrizketa"
 
-#: src/components/status.jsx:1587
+#: src/components/status.jsx:1590
 msgid "Post unpinned from profile"
 msgstr "Bidalketa profilean finkatzeari utzi zaio"
 
-#: src/components/status.jsx:1588
+#: src/components/status.jsx:1591
 msgid "Post pinned to profile"
 msgstr "Profilean finkatutako bidalketa"
 
-#: src/components/status.jsx:1593
+#: src/components/status.jsx:1596
 msgid "Unable to unpin post"
 msgstr "Ezin da bidalketa finkatzeari utzi"
 
-#: src/components/status.jsx:1593
+#: src/components/status.jsx:1596
 msgid "Unable to pin post"
 msgstr "Ezin da bidalketa finkatu"
 
-#: src/components/status.jsx:1602
+#: src/components/status.jsx:1605
 msgid "Unpin from profile"
 msgstr "Utzi profilean finkatzeari"
 
-#: src/components/status.jsx:1609
+#: src/components/status.jsx:1612
 msgid "Pin to profile"
 msgstr "Finkatu profilean"
 
-#: src/components/status.jsx:1622
+#: src/components/status.jsx:1625
 #: src/pages/settings.jsx:307
 msgid "Quote settings"
 msgstr "Iruzkinen ezarpenak"
 
-#: src/components/status.jsx:1655
+#: src/components/status.jsx:1658
 msgid "Delete this post?"
 msgstr "Bidalketa ezabatu nahi duzu?"
 
-#: src/components/status.jsx:1671
+#: src/components/status.jsx:1674
 msgid "Post deleted"
 msgstr "Bidalketa ezabatu da"
 
-#: src/components/status.jsx:1674
+#: src/components/status.jsx:1677
 msgid "Unable to delete post"
 msgstr "Ezin da bidalketa ezabatu"
 
 #. placeholder {0}: username || acct
-#: src/components/status.jsx:1699
+#: src/components/status.jsx:1702
 msgid "Remove my post from <0>@{0}</0>'s post?"
 msgstr "Nire bidalketa <0>@{0}</0>(r)en bidalketatik kendu?"
 
-#: src/components/status.jsx:1721
+#: src/components/status.jsx:1724
 msgid "Quote removed"
 msgstr "Iruzkina kendu da"
 
-#: src/components/status.jsx:1725
+#: src/components/status.jsx:1728
 msgid "Unable to remove quote"
 msgstr "Ezin da iruzkina kendu"
 
-#: src/components/status.jsx:1731
+#: src/components/status.jsx:1734
 msgid "Remove quote…"
 msgstr "Kendu iruzkina…"
 
-#: src/components/status.jsx:1745
+#: src/components/status.jsx:1748
 msgid "Report post…"
 msgstr "Salatu bidalketa…"
 
-#: src/components/status.jsx:2194
-#: src/components/status.jsx:2230
-#: src/components/status.jsx:3052
+#: src/components/status.jsx:2202
+#: src/components/status.jsx:2238
+#: src/components/status.jsx:3075
 msgid "Liked"
 msgstr "Gogoko egina"
 
-#: src/components/status.jsx:2227
-#: src/components/status.jsx:3034
+#: src/components/status.jsx:2235
+#: src/components/status.jsx:3057
 msgid "Boosted"
 msgstr "Bultzatua"
 
-#: src/components/status.jsx:2237
-#: src/components/status.jsx:3067
+#: src/components/status.jsx:2245
+#: src/components/status.jsx:3090
 msgid "Bookmarked"
 msgstr "Laster-marka jarria"
 
-#: src/components/status.jsx:2241
+#: src/components/status.jsx:2249
 msgid "Pinned"
 msgstr "Finkatua"
 
-#: src/components/status.jsx:2298
-#: src/components/status.jsx:2802
+#: src/components/status.jsx:2306
+#: src/components/status.jsx:2825
 msgid "Deleted"
 msgstr "Ezabatua"
 
-#: src/components/status.jsx:2336
-#: src/components/status.jsx:2403
+#: src/components/status.jsx:2344
+#: src/components/status.jsx:2411
 msgid "{repliesCount, plural, one {# reply} other {# replies}}"
 msgstr "{repliesCount, plural, one {erantzun #} other {# erantzun}}"
 
-#: src/components/status.jsx:2348
-#: src/components/status.jsx:2415
-#: src/components/status.jsx:2834
+#: src/components/status.jsx:2356
+#: src/components/status.jsx:2423
+#: src/components/status.jsx:2857
 msgid "Edited"
 msgstr "Editatuta"
 
-#: src/components/status.jsx:2512
-#: src/components/status.jsx:2574
-#: src/components/status.jsx:2681
+#: src/components/status.jsx:2518
+#: src/components/status.jsx:2580
+#: src/components/status.jsx:2687
 msgid "Show less"
 msgstr "Ezkutatu edukia"
 
-#: src/components/status.jsx:2512
-#: src/components/status.jsx:2574
+#: src/components/status.jsx:2518
+#: src/components/status.jsx:2580
 msgid "Show content"
 msgstr "Erakutsi edukia"
 
 #. placeholder {0}: filterInfo.titlesStr
 #. placeholder {0}: filterInfo?.titlesStr
-#: src/components/status.jsx:2677
+#: src/components/status.jsx:2683
 #: src/pages/catchup.jsx:2051
 msgid "Filtered: {0}"
 msgstr "Iragazita: {0}"
 
-#: src/components/status.jsx:2681
+#: src/components/status.jsx:2687
 msgid "Show media"
 msgstr "Erakutsi multimedia fitxategiak"
 
-#: src/components/status.jsx:2920
-#: src/components/status.jsx:2932
+#: src/components/status.jsx:2943
+#: src/components/status.jsx:2955
 msgid "Comments"
 msgstr "Iruzkinak"
 
-#: src/components/status.jsx:3233
+#: src/components/status.jsx:3256
 msgid "Post hidden by your filters"
 msgstr "Iragazkiek ezkutatutako bidalketa"
 
-#: src/components/status.jsx:3234
+#: src/components/status.jsx:3257
 msgid "Post pending"
 msgstr "Bidalketa zain dago"
 
-#: src/components/status.jsx:3238
+#: src/components/status.jsx:3261
 msgid "Post removed by author"
 msgstr "Egileak bidalketa kendu du"
 
-#: src/components/status.jsx:3239
+#: src/components/status.jsx:3262
 msgid "Post hidden because you've blocked @{name}."
 msgstr "Bidalketa ezkutatu da @{name} blokeatu duzulako."
 
-#: src/components/status.jsx:3241
+#: src/components/status.jsx:3264
 msgid "Post hidden because you've blocked {domain}."
 msgstr "Bidalketa ezkutatu da {domain} blokeatu duzulako."
 
-#: src/components/status.jsx:3242
+#: src/components/status.jsx:3265
 msgid "Post hidden because you've muted @{name}."
 msgstr "Bidalketa ezkutatu da @{name} mututu duzulako."
 
-#: src/components/status.jsx:3317
+#: src/components/status.jsx:3340
 msgid "Show anyway"
 msgstr "Erakutsi hala ere"
 
-#: src/components/status.jsx:3462
+#: src/components/status.jsx:3485
 msgid "Edit History"
 msgstr "Edizio-historia"
 
-#: src/components/status.jsx:3466
+#: src/components/status.jsx:3489
 msgid "Failed to load history"
 msgstr "Ezin da historia kargatu"
 
-#: src/components/status.jsx:3471
+#: src/components/status.jsx:3494
 msgid "Loading…"
 msgstr "Kargatzen…"
 
 #. [Name] [Visibility icon] boosted
-#: src/components/status.jsx:3603
+#: src/components/status.jsx:3626
 msgid "<0/> <1/> boosted"
 msgstr "<0/>(e)k <1/> bultzatu du"
 
@@ -2993,18 +3057,9 @@ msgid "{index}/X"
 msgstr "X/{index}"
 
 #: src/components/timeline.jsx:555
-#: src/pages/settings.jsx:1323
+#: src/pages/settings.jsx:1371
 msgid "New posts"
 msgstr "Bidalketa berriak"
-
-#: src/components/timeline.jsx:656
-#: src/components/timeline2.jsx:685
-#: src/pages/home.jsx:243
-#: src/pages/notifications.jsx:1012
-#: src/pages/status.jsx:1260
-#: src/pages/status.jsx:1734
-msgid "Try again"
-msgstr "Saiatu berriro"
 
 #. placeholder {0}: fItems.length
 #: src/components/timeline.jsx:691
@@ -3077,100 +3132,98 @@ msgstr "Saioa hasi behar da."
 msgid "Go home"
 msgstr "Joan orri nagusira"
 
-#: src/pages/account-statuses.jsx:272
+#: src/pages/account-statuses.jsx:287
 msgid "Account posts"
 msgstr "Kontuaren bidalketak"
 
-#: src/pages/account-statuses.jsx:279
-msgid "{accountDisplay} (+ Replies)"
-msgstr "{accountDisplay} (+ Erantzunak)"
+#: src/pages/account-statuses.jsx:294
+msgid "Media posts tagged #{tagged} by {accountDisplay}"
+msgstr ""
 
-#: src/pages/account-statuses.jsx:281
-msgid "{accountDisplay} (- Boosts)"
-msgstr "{accountDisplay} (- bultzadak)"
+#: src/pages/account-statuses.jsx:296
+msgid "Posts tagged #{tagged} by {accountDisplay}"
+msgstr ""
 
-#: src/pages/account-statuses.jsx:283
-msgid "{accountDisplay} (#{tagged})"
-msgstr "{accountDisplay} (#{tagged})"
+#: src/pages/account-statuses.jsx:303
+msgid "Posts in {monthYear} by {accountDisplay}"
+msgstr ""
 
-#: src/pages/account-statuses.jsx:285
-msgid "{accountDisplay} (Media)"
-msgstr "{accountDisplay} (Multimedia)"
+#: src/pages/account-statuses.jsx:305
+msgid "Media posts by {accountDisplay}"
+msgstr ""
 
-#: src/pages/account-statuses.jsx:291
-msgid "{accountDisplay} ({monthYear})"
-msgstr "{accountDisplay} ({monthYear})"
+#: src/pages/account-statuses.jsx:394
+#: src/pages/account-statuses.jsx:403
+#: src/pages/catchup.jsx:1290
+msgid "Reset filters"
+msgstr "Berrezarri iragazkiak"
 
-#: src/pages/account-statuses.jsx:366
-msgid "Clear filters"
-msgstr "Garbitu iragazkiak"
+#: src/pages/account-statuses.jsx:422
+msgid "Showing replies"
+msgstr ""
 
-#: src/pages/account-statuses.jsx:397
-msgid "Showing post with replies"
-msgstr "Erantzunak dituzten bidalketak erakusten"
+#: src/pages/account-statuses.jsx:424
+msgid "Hiding replies"
+msgstr ""
 
-#: src/pages/account-statuses.jsx:402
-msgid "+ Replies"
-msgstr "+ Erantzunak"
+#: src/pages/account-statuses.jsx:438
+msgid "Showing boosts"
+msgstr ""
 
-#: src/pages/account-statuses.jsx:416
-msgid "Showing posts without boosts"
-msgstr "Bultzadarik ez duten bidalketak erakusten"
+#: src/pages/account-statuses.jsx:440
+msgid "Hiding boosts"
+msgstr ""
 
-#: src/pages/account-statuses.jsx:421
-msgid "- Boosts"
-msgstr "- bultzadak"
-
-#: src/pages/account-statuses.jsx:435
+#: src/pages/account-statuses.jsx:457
 msgid "Showing posts with media"
 msgstr "Multimedia fitxategiak dituzten bidalketak erakusten"
 
 #. placeholder {0}: tag.name
-#: src/pages/account-statuses.jsx:460
+#: src/pages/account-statuses.jsx:492
 msgid "Showing posts tagged with #{0}"
 msgstr "#{0} traola duten bidalketak erakusten"
 
 #. placeholder {0}: date.toLocaleString( i18n.locale, { month: 'long', year: 'numeric', }, )
-#: src/pages/account-statuses.jsx:500
+#: src/pages/account-statuses.jsx:532
 msgid "Showing posts in {0}"
 msgstr "{0}(e)ko bidalketak erakusten"
 
 #. placeholder {0}: account?.username
-#: src/pages/account-statuses.jsx:547
+#: src/pages/account-statuses.jsx:579
 msgid "Search @{0}'s posts"
 msgstr "Bilatu @{0}(r)en bidalketetan"
 
-#: src/pages/account-statuses.jsx:593
+#: src/pages/account-statuses.jsx:628
 #: src/pages/search.jsx:359
 #: src/pages/search.jsx:506
 msgid "Posts"
 msgstr "bidalketa"
 
-#: src/pages/account-statuses.jsx:618
+#: src/pages/account-statuses.jsx:653
 msgid "Nothing to see here yet."
 msgstr "Ez dago ikusteko ezer."
 
-#: src/pages/account-statuses.jsx:619
+#: src/pages/account-statuses.jsx:654
 #: src/pages/public.jsx:130
 #: src/pages/trending.jsx:452
 msgid "Unable to load posts"
 msgstr "Ezin dira bidalketak kargatu"
 
-#: src/pages/account-statuses.jsx:660
-#: src/pages/account-statuses.jsx:690
+#: src/pages/account-statuses.jsx:695
+#: src/pages/account-statuses.jsx:725
 msgid "Unable to fetch account info"
 msgstr "Ezin da kontuaren informazioa eskuratu"
 
 #. placeholder {0}: accountInstance ? ( <> {' '} (<b>{punycode.toUnicode(accountInstance)}</b>) </> ) : null
-#: src/pages/account-statuses.jsx:667
+#: src/pages/account-statuses.jsx:702
 msgid "Switch to account's server {0}"
 msgstr "Aldatu kontuko zerbitzarira {0}"
 
-#: src/pages/account-statuses.jsx:697
+#: src/pages/account-statuses.jsx:732
 msgid "Switch to my server (<0>{currentInstance}</0>)"
 msgstr "Aldatu nire zerbitzarira(<0>{currentInstance}</0>)"
 
-#: src/pages/account-statuses.jsx:770
+#: src/pages/account-statuses.jsx:805
 msgid "Month"
 msgstr "Hilabetea"
 
@@ -3399,10 +3452,6 @@ msgstr "Bidalketak eskuratzen…"
 #: src/pages/catchup.jsx:1255
 msgid "This might take a while."
 msgstr "Litekeena da donbora behar izatea."
-
-#: src/pages/catchup.jsx:1290
-msgid "Reset filters"
-msgstr "Berrezarri iragazkiak"
 
 #: src/pages/catchup.jsx:1298
 #: src/pages/catchup.jsx:1741
@@ -3806,10 +3855,6 @@ msgstr "Kudeatu kideak"
 msgid "Remove <0>@{0}</0> from list?"
 msgstr "<0>@{0}</0> zerrendatik kendu nahi?"
 
-#: src/pages/list.jsx:388
-msgid "Remove…"
-msgstr "Kendu…"
-
 #. placeholder {0}: lists.length
 #: src/pages/lists.jsx:115
 msgid "{0, plural, one {# list} other {# lists}}"
@@ -3888,113 +3933,113 @@ msgstr "Nik nahi gabe era pribatuan aipatu nautenenak"
 msgid "Who are limited by server moderators"
 msgstr "Zerbitzariko moderatzaileek muga jarri dietenak"
 
-#: src/pages/notifications.jsx:707
-#: src/pages/notifications.jsx:1060
+#: src/pages/notifications.jsx:727
+#: src/pages/notifications.jsx:1080
 msgid "Notifications settings"
 msgstr "Jakinarazpenen ezarpenak"
 
-#: src/pages/notifications.jsx:725
+#: src/pages/notifications.jsx:745
 msgid "New notifications"
 msgstr "Jakinarazpen berriak"
 
 #. placeholder {0}: announcements.length
-#: src/pages/notifications.jsx:736
+#: src/pages/notifications.jsx:756
 msgid "{0, plural, one {Announcement} other {Announcements}}"
 msgstr "{0, plural, one {Iragarpena} other {Iragarpenak}}"
 
-#: src/pages/notifications.jsx:783
-#: src/pages/settings.jsx:1311
+#: src/pages/notifications.jsx:803
+#: src/pages/settings.jsx:1359
 msgid "Follow requests"
 msgstr "Jarraipen-eskaerak"
 
 #. placeholder {0}: followRequests.length
-#: src/pages/notifications.jsx:788
+#: src/pages/notifications.jsx:808
 msgid "{0, plural, one {# follow request} other {# follow requests}}"
 msgstr "{0, plural, one {Jarraipen-eskaera #} other {# jarraipen-eskaera}}"
 
 #. placeholder {0}: notificationsPolicy.summary.pendingRequestsCount
-#: src/pages/notifications.jsx:843
+#: src/pages/notifications.jsx:863
 msgid "{0, plural, one {Filtered notifications from # person} other {Filtered notifications from # people}}"
 msgstr "{0, plural, one {Pertsona #en iragazitako jakinarazpenak} other {# pertsonaren iragazitako jakinarazpenak}}"
 
-#: src/pages/notifications.jsx:926
+#: src/pages/notifications.jsx:946
 msgid "Only mentions"
 msgstr "Aipamenak soilik"
 
-#: src/pages/notifications.jsx:932
+#: src/pages/notifications.jsx:952
 msgid "Today"
 msgstr "Gaur"
 
-#: src/pages/notifications.jsx:937
+#: src/pages/notifications.jsx:957
 msgid "You're all caught up."
 msgstr "Zaharrak berri."
 
-#: src/pages/notifications.jsx:960
+#: src/pages/notifications.jsx:980
 msgid "Yesterday"
 msgstr "Atzo"
 
-#: src/pages/notifications.jsx:1008
+#: src/pages/notifications.jsx:1028
 msgid "Unable to load notifications"
 msgstr "Ezin dira jakinarazpenak kargatu"
 
-#: src/pages/notifications.jsx:1087
+#: src/pages/notifications.jsx:1107
 msgid "Notifications settings updated"
 msgstr "Jakinarazpenen ezarpenak eguneratu dira"
 
-#: src/pages/notifications.jsx:1095
+#: src/pages/notifications.jsx:1115
 msgid "Filter out notifications from people:"
 msgstr "Ez erakutsi hauen jakinarazpenak:"
 
-#: src/pages/notifications.jsx:1109
+#: src/pages/notifications.jsx:1129
 msgid "Filter"
 msgstr "Iragazi"
 
-#: src/pages/notifications.jsx:1112
+#: src/pages/notifications.jsx:1132
 msgid "Ignore"
 msgstr "Ez hartu kontuan"
 
 #. placeholder {0}: niceDateTime(updatedAtDate)
-#: src/pages/notifications.jsx:1185
+#: src/pages/notifications.jsx:1205
 msgid "Updated <0>{0}</0>"
 msgstr "<0>{0}</0>(e)an eguneratu zen"
 
 #. placeholder {0}: account.username
-#: src/pages/notifications.jsx:1253
+#: src/pages/notifications.jsx:1273
 msgid "View notifications from <0>@{0}</0>"
 msgstr "Ikusi <0>@{0}</0>(r)en jakinarazpenak"
 
 #. placeholder {0}: account.username
-#: src/pages/notifications.jsx:1274
+#: src/pages/notifications.jsx:1294
 msgid "Notifications from <0>@{0}</0>"
 msgstr "<0>@{0}</0>(r)en jakinarazpenak"
 
 #. placeholder {0}: request.account.username
-#: src/pages/notifications.jsx:1343
+#: src/pages/notifications.jsx:1363
 msgid "Notifications from @{0} will not be filtered from now on."
 msgstr "Aurrerantzean ez dira @{0}(r)en jakinarazpenak iragaziko."
 
-#: src/pages/notifications.jsx:1348
+#: src/pages/notifications.jsx:1368
 msgid "Unable to accept notification request"
 msgstr "Ezin da jakinarazpen-eskaera onartu"
 
-#: src/pages/notifications.jsx:1353
+#: src/pages/notifications.jsx:1373
 msgid "Allow"
 msgstr "Baimendu"
 
 #. placeholder {0}: request.account.username
-#: src/pages/notifications.jsx:1374
+#: src/pages/notifications.jsx:1394
 msgid "Notifications from @{0} will not show up in Filtered notifications from now on."
 msgstr "Aurrerantzean ez dira @{0}(r)en jakinarazpenak erakutsiko iragazitako jakinarazpenetan."
 
-#: src/pages/notifications.jsx:1379
+#: src/pages/notifications.jsx:1399
 msgid "Unable to dismiss notification request"
 msgstr "Ezin da jakinarazpen-eskaera zokoratu"
 
-#: src/pages/notifications.jsx:1384
+#: src/pages/notifications.jsx:1404
 msgid "Dismiss"
 msgstr "Baztertu"
 
-#: src/pages/notifications.jsx:1399
+#: src/pages/notifications.jsx:1419
 msgid "Dismissed"
 msgstr "Baztertuta"
 
@@ -4178,299 +4223,319 @@ msgstr "Defektuzko ikusgaitasunaren eguneraketak huts egin du"
 msgid "Synced to your server's settings. <0>Go to your server ({instance}) for more settings.</0>"
 msgstr "Zure zerbitzariko ezarpenekin sinkronizatu da. <0>Joan zure zerbitzarira ({instance}) ezarpen gehiagorako.</0>"
 
-#: src/pages/settings.jsx:373
+#: src/pages/settings.jsx:375
+msgid "Wellbeing"
+msgstr ""
+
+#: src/pages/settings.jsx:388
+msgid "Hide Trending timeline"
+msgstr ""
+
+#: src/pages/settings.jsx:400
+msgid "Hide Local timeline"
+msgstr ""
+
+#: src/pages/settings.jsx:413
+msgid "Hide Federated timeline"
+msgstr ""
+
+#: src/pages/settings.jsx:421
 msgid "Experiments"
 msgstr "Esperimentuak"
 
-#: src/pages/settings.jsx:386
+#: src/pages/settings.jsx:434
 msgid "Auto refresh timeline posts"
 msgstr "Automatikoki freskatu denbora-lerroko bidalketak"
 
-#: src/pages/settings.jsx:398
+#: src/pages/settings.jsx:446
 msgid "Boosts carousel"
 msgstr "Bultzaden karrusela"
 
-#: src/pages/settings.jsx:415
+#: src/pages/settings.jsx:463
 msgid "Post translation"
 msgstr "Bidalketen itzulpena"
 
-#: src/pages/settings.jsx:426
+#: src/pages/settings.jsx:474
 msgid "Translate to "
 msgstr "Itzuli… "
 
-#: src/pages/settings.jsx:437
+#: src/pages/settings.jsx:485
 msgid "System language ({systemTargetLanguageText})"
 msgstr "Sistemak darabilena ({systemTargetLanguageText})"
 
 #. placeholder {0}: snapStates.settings.contentTranslationHideLanguages .length
-#: src/pages/settings.jsx:463
+#: src/pages/settings.jsx:511
 msgid "{0, plural, =0 {Hide \"Translate\" button for:} other {Hide \"Translate\" button for (#):}}"
 msgstr "{0, plural, one {}=0 {Ezkutatu \"Itzuli\" botoia honentzat:} other {Ezkutatu \"Itzuli\" botoia (#) hauentzat:}}"
 
-#: src/pages/settings.jsx:518
+#: src/pages/settings.jsx:566
 msgid "Note: This feature uses external translation services, powered by <0>{TRANSLATION_API_NAME}</0>."
 msgstr "Oharra: ezaugarri honek hirugarrenen itzulpen-zerbitzuak darabiltza, <0>{TRANSLATION_API_NAME}</0>(r)i esker."
 
-#: src/pages/settings.jsx:546
+#: src/pages/settings.jsx:594
 msgid "Auto inline translation"
 msgstr "Itzulpen automatikoa bidalketan bertan"
 
-#: src/pages/settings.jsx:550
+#: src/pages/settings.jsx:598
 msgid "Automatically show translation for posts in timeline. Only works for <0>short</0> posts without content warning, media and poll."
 msgstr "Erakutsi automatikoki bidalketen itzulpena denbora-lerroaren baitan. Bidalketa <0>labur</0>retarako balio du bakarrik, eta ezin dute edukiari buruzko oharrik, multimedia fitxategirik edo bozketarik izan."
 
-#: src/pages/settings.jsx:577
+#: src/pages/settings.jsx:625
 msgid "Paginated timeline (beta)"
 msgstr "Orrialdekatutako denbora-lerroa (beta)"
 
-#: src/pages/settings.jsx:581
+#: src/pages/settings.jsx:629
 msgid "Manual pagination of timeline posts instead of infinite scrolling. Only works for Home/Following timeline for now. Auto refresh and boosts carousel will not work when this is enabled."
 msgstr "Denbora-lerroko bidalketak eskuz orrialdekatzen dira korritze amaigabearen ordez. Bakarrik Hasiera/Jarraitzen diezunen denbora-lerroarekin eragiten die oraingoz. Gaituz gero, freskatze automatikoa eta bultzaden karrusela ez dira ibiliko."
 
-#: src/pages/settings.jsx:601
+#: src/pages/settings.jsx:649
 msgid "GIF Picker for composer"
 msgstr "GIF hautatzailea"
 
-#: src/pages/settings.jsx:605
+#: src/pages/settings.jsx:653
 msgid "Note: This feature uses external GIF search service, powered by <0>GIPHY</0>. G-rated (suitable for viewing by all ages), tracking parameters are stripped, referrer information is omitted from requests, but search queries and IP address information will still reach their servers."
 msgstr "Oharra: ezaugarri honek hirugarrenen zerbitzua darabil GIFen bilaketarako, <0>GIPHY</0>k eskainia. Adin guztietarako egokia da, jarraipen parametroak ezabatu egiten dira, jatorriaren informazioa eskarietatik kanpo uzten da, baina bilaketa-kontsultek eta IP helbidearen informazioak bere zerbitzarietara iristen jarraituko dute."
 
-#: src/pages/settings.jsx:634
+#: src/pages/settings.jsx:682
 msgid "Image description generator"
 msgstr "Irudien deskribapen-sortzailea"
 
-#: src/pages/settings.jsx:639
+#: src/pages/settings.jsx:687
 msgid "Only for new images while composing new posts."
 msgstr "Soilik irudi berrientzat bidalketa berriak idaztean."
 
-#: src/pages/settings.jsx:646
+#: src/pages/settings.jsx:694
 msgid "Note: This feature uses external AI service, powered by <0>img-alt-api</0>. May not work well. Only for images and in English."
 msgstr "Oharra: ezaugarri honek hirugarrenen AA zerbitzua darabil, <0>img-alt-api</0>k eskainia. Litekeena da erabat ondo ez egitea. Soilik irudientzat eta soilik ingelesez."
 
-#: src/pages/settings.jsx:674
+#: src/pages/settings.jsx:722
 msgid "\"Cloud\" import/export for shortcuts settings"
 msgstr "Lasterbideen hodeiko inportazio / esportazio ezarpenak"
 
-#: src/pages/settings.jsx:679
+#: src/pages/settings.jsx:727
 msgid "⚠️⚠️⚠️ Very experimental.<0/>Stored in your own profile’s notes. Profile (private) notes are mainly used for other profiles, and hidden for own profile."
 msgstr "⚠️⚠️⚠️ Oso esperimentala.<0/>Zure profileko oharretan gordetzen da. Profileko oharrak (pribatuak) beste profil batzuei buruzko oharretarako erabiltzen dira nagusiki, eta norberaren profilean ezkutatuta daude."
 
-#: src/pages/settings.jsx:690
+#: src/pages/settings.jsx:738
 msgid "Note: This feature uses currently-logged-in server API."
 msgstr "Oharra: ezaugarri honek saio hasita duzun zerbitzariaren APIa darabil."
 
-#: src/pages/settings.jsx:706
+#: src/pages/settings.jsx:754
 msgid "Cloak mode <0>(<1>Text</1> → <2>████</2>)</0>"
 msgstr "Eskalki modua <0>(<1>Testua</1> → <2>████</2>)</0>"
 
-#: src/pages/settings.jsx:715
+#: src/pages/settings.jsx:763
 msgid "Replace text as blocks, useful when taking screenshots, for privacy reasons."
 msgstr "Testua blokeekin ordezkatzen du, pantaila-argazkiak egitean aproposa pribatutasun arrazoiengatik."
 
-#: src/pages/settings.jsx:744
+#: src/pages/settings.jsx:792
 msgid "Install {CLIENT_NAME}"
 msgstr "Instalatu {CLIENT_NAME}"
 
-#: src/pages/settings.jsx:752
+#: src/pages/settings.jsx:800
 msgid "About"
 msgstr "Honi buruz"
 
-#: src/pages/settings.jsx:791
+#: src/pages/settings.jsx:839
 msgid "<0>Built</0> by <1>@cheeaun</1>"
 msgstr "<1>@cheeaun</1>ek <0>sortua</0>"
 
-#: src/pages/settings.jsx:820
+#: src/pages/settings.jsx:868
 msgid "Sponsor"
 msgstr "Eman babesa"
 
-#: src/pages/settings.jsx:828
+#: src/pages/settings.jsx:876
 msgid "Donate"
 msgstr "Egin dohaintza"
 
-#: src/pages/settings.jsx:844
+#: src/pages/settings.jsx:892
 msgid "What's new"
 msgstr "Nobedadeak"
 
-#: src/pages/settings.jsx:848
+#: src/pages/settings.jsx:896
 msgid "Privacy Policy"
 msgstr "Pribatutasun politika"
 
 #. placeholder {0}: WEBSITE.replace(/https?:\/\//g, '').replace(/\/$/, '')
-#: src/pages/settings.jsx:855
+#: src/pages/settings.jsx:903
 msgid "<0>Site:</0> {0}"
 msgstr "<0>Gunea:</0> {0}"
 
 #. placeholder {0}: !__FAKE_COMMIT_HASH__ && ( <span class="ib insignificant"> ( <a href={`https://github.com/cheeaun/phanpy/commit/${__COMMIT_HASH__}`} target="_blank" rel="noopener" > <RelativeTime datetime={new Date(__BUILD_TIME__)} /> </a> ) </span> )
-#: src/pages/settings.jsx:862
+#: src/pages/settings.jsx:910
 msgid "<0>Version:</0> <1/> {0}"
 msgstr "<0>Bertsioa:</0> <1/> {0}"
 
-#: src/pages/settings.jsx:877
+#: src/pages/settings.jsx:925
 msgid "Version string copied"
 msgstr "Bertsioaren haria kopiatuta"
 
-#: src/pages/settings.jsx:880
+#: src/pages/settings.jsx:928
 msgid "Unable to copy version string"
 msgstr "Ezin da bertsioaren haria kopiatu"
 
 #. Preview of one character, in largest size
 #. Preview of one character, in smallest size
-#: src/pages/settings.jsx:1024
-#: src/pages/settings.jsx:1048
+#: src/pages/settings.jsx:1072
+#: src/pages/settings.jsx:1096
 msgid "A"
 msgstr "A"
 
-#: src/pages/settings.jsx:1208
-#: src/pages/settings.jsx:1213
+#: src/pages/settings.jsx:1256
+#: src/pages/settings.jsx:1261
 msgid "Failed to update subscription. Please try again."
 msgstr "Ezin da harpidetza eguneratu. Saiatu berriro."
 
-#: src/pages/settings.jsx:1219
+#: src/pages/settings.jsx:1267
 msgid "Failed to remove subscription. Please try again."
 msgstr "Ezin da harpidetza kendu. Saiatu berriro."
 
-#: src/pages/settings.jsx:1226
+#: src/pages/settings.jsx:1274
 msgid "Push Notifications (beta)"
 msgstr "Push jakinarazpenak (beta)"
 
-#: src/pages/settings.jsx:1248
+#: src/pages/settings.jsx:1296
 msgid "Push notifications are blocked. Please enable them in your browser settings."
 msgstr "Push jakinarazpenak blokeatuta daude. Gaitu itzazu nabigatzaileko ezarpenetan."
 
 #. placeholder {0}: [ { value: 'all', label: t`anyone`, }, { value: 'followed', label: t`people I follow`, }, { value: 'follower', label: t`followers`, }, ].map((type) => ( <option value={type.value}>{type.label}</option> ))
-#: src/pages/settings.jsx:1257
+#: src/pages/settings.jsx:1305
 msgid "Allow from <0>{0}</0>"
 msgstr "Baimendu <0>{0}</0>(r)en"
 
-#: src/pages/settings.jsx:1266
+#: src/pages/settings.jsx:1314
 msgid "anyone"
 msgstr "edonor"
 
-#: src/pages/settings.jsx:1270
+#: src/pages/settings.jsx:1318
 msgid "people I follow"
 msgstr "jarraitzen diodan jendea"
 
-#: src/pages/settings.jsx:1274
+#: src/pages/settings.jsx:1322
 msgid "followers"
 msgstr "jarraitzaile"
 
-#: src/pages/settings.jsx:1307
+#: src/pages/settings.jsx:1355
 msgid "Follows"
 msgstr "Jarraitzen die"
 
-#: src/pages/settings.jsx:1315
+#: src/pages/settings.jsx:1363
 msgid "Polls"
 msgstr "Bozketak"
 
-#: src/pages/settings.jsx:1319
+#: src/pages/settings.jsx:1367
 msgid "Post edits"
 msgstr "Bidalketen edizioak"
 
-#: src/pages/settings.jsx:1340
+#: src/pages/settings.jsx:1388
 msgid "Push permission was not granted since your last login. You'll need to <0><1>log in</1> again to grant push permission</0>."
 msgstr "Ez da push baimenik eman saioa azkenekoz hasi zenuenetik. <0><1>Hasi saioa</1> berriro baimentzeko</0>."
 
-#: src/pages/settings.jsx:1356
+#: src/pages/settings.jsx:1404
 msgid "NOTE: Push notifications only work for <0>one account</0>."
 msgstr "Oharra: push jakinarazpenak <0>kontu bakarrarentzat</0> dabiltza."
 
+#: src/pages/status.jsx:156
+msgid "Unable to load post."
+msgstr ""
+
 #. js-lingui-explicit-id
-#: src/pages/status.jsx:791
-#: src/pages/status.jsx:1485
+#: src/pages/status.jsx:800
+#: src/pages/status.jsx:1498
 msgid "post.title"
 msgstr "Bidalketa"
 
-#: src/pages/status.jsx:1088
+#: src/pages/status.jsx:1097
 msgid "You're not logged in. Interactions (reply, boost, etc) are not possible."
 msgstr "Ez duzu saiorik hasi. Ezin duzu interaktuatu (erantzun, bultzatu...)"
 
-#: src/pages/status.jsx:1108
+#: src/pages/status.jsx:1117
 msgid "This post is from another server (<0>{instance}</0>). Interactions (reply, boost, etc) are not possible."
 msgstr "Bidalketa hau beste zerbitzari batekoa da (<0>{instance}</0>). Interakzioak (erantzunak, bultzadak, etab.) ez dira posible."
 
-#: src/pages/status.jsx:1136
+#: src/pages/status.jsx:1145
 msgid "Error: {e}"
 msgstr "Errorea: {e}"
 
-#: src/pages/status.jsx:1143
+#: src/pages/status.jsx:1152
 msgid "Switch to my server to enable interactions"
 msgstr "Aldatu nire zerbitzarira interakzioak gaitzeko"
 
-#: src/pages/status.jsx:1251
+#: src/pages/status.jsx:1261
 msgid "Unable to load replies."
 msgstr "Ezin dira erantzunak kargatu."
 
-#: src/pages/status.jsx:1307
+#: src/pages/status.jsx:1320
 msgid "{months, plural, one {# month later} other {# months later}}"
 msgstr "{months, plural, one {hilabete geroago} other {# hilabete geroago}}"
 
-#: src/pages/status.jsx:1313
+#: src/pages/status.jsx:1326
 msgid "{years, plural, one {# year later} other {# years later}}"
 msgstr "{years, plural, one {urtebete geroago} other {# urte geroago}}"
 
-#: src/pages/status.jsx:1445
+#: src/pages/status.jsx:1458
 msgid "Back"
 msgstr "Atzera"
 
-#: src/pages/status.jsx:1476
+#: src/pages/status.jsx:1489
 msgid "Go to main post"
 msgstr "Joan bidalketa nagusira"
 
 #. placeholder {0}: ancestors.length
-#: src/pages/status.jsx:1499
+#: src/pages/status.jsx:1512
 msgid "{0} posts above ‒ Go to top"
 msgstr "{0} bidalketa goian ‒ Joan gora"
 
-#: src/pages/status.jsx:1548
-#: src/pages/status.jsx:1611
+#: src/pages/status.jsx:1561
+#: src/pages/status.jsx:1624
 msgid "Switch to Side Peek view"
 msgstr "Aldatu gainbegirada bistara"
 
-#: src/pages/status.jsx:1612
+#: src/pages/status.jsx:1625
 msgid "Switch to Full view"
 msgstr "Aldatu bista osora"
 
-#: src/pages/status.jsx:1630
+#: src/pages/status.jsx:1643
 msgid "Show all sensitive content"
 msgstr "Erakutsi eduki hunkigarri guztia"
 
-#: src/pages/status.jsx:1635
+#: src/pages/status.jsx:1648
 msgid "Experimental"
 msgstr "Esperimentala"
 
-#: src/pages/status.jsx:1644
+#: src/pages/status.jsx:1657
 msgid "Unable to switch"
 msgstr "Ezin da aldatu"
 
 #. placeholder {0}: punycode.toUnicode( postInstance, )
-#: src/pages/status.jsx:1651
+#: src/pages/status.jsx:1664
 msgid "Switch to post's server ({0})"
 msgstr "Aldatu bidalketaren zerbitzarira ({0})"
 
-#: src/pages/status.jsx:1654
+#: src/pages/status.jsx:1667
 msgid "Switch to post's server"
 msgstr "Aldatu bidalketaren zerbitzarira"
 
-#: src/pages/status.jsx:1667
+#: src/pages/status.jsx:1680
 msgid "View Edit History Snapshots"
 msgstr "Ikusi edizio-historia"
 
-#: src/pages/status.jsx:1725
+#: src/pages/status.jsx:1737
 msgid "Unable to load post"
 msgstr "Ezin da bidalketa kargatu"
 
 #. placeholder {0}: replies.length
 #. placeholder {1}: shortenNumber(replies.length)
-#: src/pages/status.jsx:1862
+#: src/pages/status.jsx:1876
 msgid "{0, plural, one {# reply} other {<0>{1}</0> replies}}"
 msgstr "{0, plural, one {erantzun #} other {<0>{1}</0> erantzun}}"
 
 #. placeholder {0}: shortenNumber(totalComments)
-#: src/pages/status.jsx:1880
+#: src/pages/status.jsx:1894
 msgid "{totalComments, plural, one {# comment} other {<0>{0}</0> comments}}"
 msgstr "{totalComments, plural, one {iruzkin #} other {<0>{0}</0> iruzkin}}"
 
-#: src/pages/status.jsx:1902
+#: src/pages/status.jsx:1916
 msgid "View post with its replies"
 msgstr "Ikusi bidalketa eta erantzunak"
 
