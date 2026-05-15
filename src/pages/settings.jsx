@@ -84,10 +84,6 @@ function Settings({ onClose }) {
     store.local.get('experiments-tabBarV2') ?? false,
   );
 
-  const [expTimeline2, setExpTimeline2] = useState(
-    store.local.get('experiments-timeline2') ?? false,
-  );
-
   const disableQuotePolicy = prefs['posting:default:visibility'] === 'private';
 
   return (
@@ -611,15 +607,9 @@ function Settings({ onClose }) {
                 <label>
                   <input
                     type="checkbox"
-                    checked={expTimeline2}
+                    checked={snapStates.settings.paginatedTimeline}
                     onChange={(e) => {
-                      const { checked } = e.target;
-                      setExpTimeline2(checked);
-                      if (checked) {
-                        store.local.set('experiments-timeline2', true);
-                      } else {
-                        store.local.del('experiments-timeline2');
-                      }
+                      states.settings.paginatedTimeline = e.target.checked;
                     }}
                   />{' '}
                   <Trans>Paginated timeline (beta)</Trans>

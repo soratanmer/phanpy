@@ -88,6 +88,7 @@ const states = proxy({
     hideTrendingTimeline: false,
     hideLocalTimeline: false,
     hideFederatedTimeline: false,
+    paginatedTimeline: false,
   },
 });
 
@@ -128,6 +129,8 @@ export function initStates() {
     store.account.get('settings-hideLocalTimeline') ?? false;
   states.settings.hideFederatedTimeline =
     store.account.get('settings-hideFederatedTimeline') ?? false;
+  states.settings.paginatedTimeline =
+    store.account.get('settings-paginatedTimeline') ?? false;
 }
 
 subscribeKey(states, 'notificationsLast', (v) => {
@@ -185,6 +188,9 @@ subscribe(states, (changes) => {
     }
     if (path.join('.') === 'settings.hideFederatedTimeline') {
       store.account.set('settings-hideFederatedTimeline', !!value);
+    }
+    if (path.join('.') === 'settings.paginatedTimeline') {
+      store.account.set('settings-paginatedTimeline', !!value);
     }
   }
 });
