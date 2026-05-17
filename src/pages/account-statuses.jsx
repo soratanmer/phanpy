@@ -1,8 +1,12 @@
+import './account-statuses.css';
+
+import { Trans, useLingui } from '@lingui/react/macro';
 import { MenuItem } from '@szhsin/react-menu';
 import {
   useCallback,
   useEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
 } from 'preact/hooks';
@@ -11,23 +15,30 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { useSnapshot } from 'valtio';
 
 import AccountInfo from '../components/account-info';
+import AccountInfoMini from '../components/account-info-mini';
 import EmojiText from '../components/emoji-text';
 import Icon from '../components/icon';
 import Link from '../components/link';
 import Menu2 from '../components/menu2';
 import Timeline from '../components/timeline';
 import { api } from '../utils/api';
+import isSearchEnabled from '../utils/is-search-enabled';
+import mem from '../utils/mem';
 import pmem from '../utils/pmem';
 import showToast from '../utils/show-toast';
 import states, { saveStatus } from '../utils/states';
-import { isMediaFirstInstance } from '../utils/store-utils';
+import {
+  getCurrentAccountID,
+  isMediaFirstInstance,
+} from '../utils/store-utils';
+import supports from '../utils/supports';
 import useTitle from '../utils/useTitle';
 
 const LIMIT = 20;
 const MIN_YEAR = 1983;
 const MIN_YEAR_MONTH = `${MIN_YEAR}-01`; // Birth of the Internet
 
-const supportsInputMonth = (() => {
+const supportsInputMonth = mem(() => {
   try {
     const input = document.createElement('input');
     input.setAttribute('type', 'month');
@@ -35,29 +46,69 @@ const supportsInputMonth = (() => {
   } catch (e) {
     return false;
   }
-})();
+});
 
-async function _isSearchEnabled(instance) {
-  const { masto } = api({ instance });
-  const results = await masto.v2.search.fetch({
-    q: 'from:me',
-    type: 'statuses',
-    limit: 1,
-  });
-  return !!results?.statuses?.length;
-}
-const isSearchEnabled = pmem(_isSearchEnabled);
-
-function AccountStatuses() {
+function AccountStatuses({ columnMode, ...props }) {
+  const { i18n, t } = useLingui();
   const snapStates = useSnapshot(states);
-  const { id, ...params } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const { id, ...params } = columnMode ? { id: props.id } : useParams();
+
+  const profileSearchParamsRef = useRef(new URLSearchParams({ replies: 1 }));
+  const [, forceUpdate] = useReducer((c) => c + 1, 0);
+  const profileSetSearchParams = useCallback((objOrFn) => {
+    const params = profileSearchParamsRef.current;
+    if (typeof objOrFn === 'function') {
+      objOrFn(params);
+    } else if (objOrFn instanceof URLSearchParams) {
+      [...params.keys()].forEach((key) => params.delete(key));
+      objOrFn.forEach((value, key) => params.set(key, value));
+    } else {
+      Object.entries(objOrFn).forEach(([key, value]) => {
+        if (value) {
+          params.set(key, value);
+        } else {
+          params.delete(key);
+        }
+      });
+    }
+    forceUpdate();
+  }, []);
+  const [searchParams, setSearchParams] = columnMode
+    ? [profileSearchParamsRef.current, profileSetSearchParams]
+    : useSearchParams();
+  const clearAndSetParam = useCallback(
+    (paramName, paramValue) => {
+      const params = new URLSearchParams(
+        columnMode ? { replies: 1 } : undefined,
+      );
+      if (paramValue !== undefined) {
+        params.set(paramName, paramValue);
+      }
+      setSearchParams(params);
+    },
+    [setSearchParams],
+  );
+  const toggleParam = useCallback(
+    (paramName, paramValue) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (params.get(paramName)) {
+        params.delete(paramName);
+      } else {
+        params.set(paramName, paramValue ?? '1');
+      }
+      setSearchParams(params);
+    },
+    [setSearchParams, searchParams],
+  );
+
   const month = searchParams.get('month');
   const excludeReplies = !searchParams.get('replies');
   const excludeBoosts = !!searchParams.get('boosts');
   const tagged = searchParams.get('tagged');
   const media = !!searchParams.get('media');
-  const { masto, instance, authenticated } = api({ instance: params.instance });
+  const { masto, instance, authenticated } = api({
+    instance: params?.instance,
+  });
   const { masto: currentMasto, instance: currentInstance } = api();
   const accountStatusesIterator = useRef();
 
@@ -135,7 +186,7 @@ function AccountStatuses() {
         searchOffsetRef.current += LIMIT;
       }
 
-      const searchResults = await masto.v2.search.fetch({
+      const searchResults = await masto.v2.search.list({
         q: `from:${account.acct} after:${afterStr} before:${beforeStr}`,
         type: 'statuses',
         limit,
@@ -154,12 +205,13 @@ function AccountStatuses() {
     }
 
     let results = [];
-    if (firstLoad) {
+    if (firstLoad && !columnMode) {
       const { value } = await masto.v1.accounts
         .$select(id)
         .statuses.list({
           pinned: true,
         })
+        .values()
         .next();
       if (value?.length && !tagged && !media) {
         const pinnedStatuses = value.map((status) => {
@@ -190,27 +242,31 @@ function AccountStatuses() {
           exclude_reblogs: excludeBoosts,
           only_media: media || undefined,
           tagged,
-        });
+        })
+        .values();
     }
     const { value, done } = await accountStatusesIterator.current.next();
     if (value?.length) {
-      // Check if value is same as pinned post (results)
-      // If the index for every post is the same, means API might not support pinned posts
-      if (results.length) {
-        let pinnedStatusesIds = [];
-        if (results[0]?.type === 'pinned') {
-          pinnedStatusesIds = results[0].id;
-        } else {
-          pinnedStatusesIds = results
-            .filter((status) => status._pinned)
-            .map((status) => status.id);
-        }
-        const containsAllPinned = pinnedStatusesIds.every((postId) =>
-          value.some((status) => status.id === postId),
-        );
-        if (containsAllPinned) {
-          // Remove pinned posts
-          results = [];
+      if (!supports('@mastodon/pinned-posts')) {
+        // Check if value is same as pinned post (results)
+        // If the index for every post is the same, means API might not support pinned posts
+        // TODO: This is a really weird check, fix this at some point
+        if (results.length) {
+          let pinnedStatusesIds = [];
+          if (results[0]?.type === 'pinned') {
+            pinnedStatusesIds = results[0].id;
+          } else {
+            pinnedStatusesIds = results
+              .filter((status) => status._pinned)
+              .map((status) => status.id);
+          }
+          const containsAllPinned = pinnedStatusesIds.every((postId) =>
+            value.some((status) => status.id === postId),
+          );
+          if (containsAllPinned) {
+            // Remove pinned posts
+            results = [];
+          }
         }
       }
 
@@ -227,40 +283,34 @@ function AccountStatuses() {
   }
 
   const [featuredTags, setFeaturedTags] = useState([]);
-  useTitle(
-    account?.acct
-      ? `${
-          account?.displayName
-            ? `${account.displayName} (${/@/.test(account.acct) ? '' : '@'}${
-                account.acct
-              })`
-            : `${/@/.test(account.acct) ? '' : '@'}${account.acct}`
-        }${
-          !excludeReplies
-            ? ' (+ Replies)'
-            : excludeBoosts
-            ? ' (- Boosts)'
-            : tagged
-            ? ` (#${tagged})`
-            : media
-            ? ' (Media)'
-            : month
-            ? ` (${new Date(month).toLocaleString('default', {
-                month: 'long',
-                year: 'numeric',
-              })})`
-            : ''
-        }`
-      : 'Account posts',
-    '/:instance?/a/:id',
-  );
 
-  const fetchAccountPromiseRef = useRef();
+  let title = t`Account posts`;
+  if (account?.acct) {
+    const acctDisplay = (/@/.test(account.acct) ? '' : '@') + account.acct;
+    const accountDisplay = account?.displayName
+      ? `${account.displayName} (${acctDisplay})`
+      : acctDisplay;
+    if (tagged && media) {
+      title = t`Media posts tagged #${tagged} by ${accountDisplay}`;
+    } else if (tagged) {
+      title = t`Posts tagged #${tagged} by ${accountDisplay}`;
+    } else if (month) {
+      const [y, m] = month.split('-');
+      const monthYear = new Date(+y, +m - 1, 1).toLocaleString(i18n.locale, {
+        month: 'long',
+        year: 'numeric',
+      });
+      title = t`Posts in ${monthYear} by ${accountDisplay}`;
+    } else if (media) {
+      title = t`Media posts by ${accountDisplay}`;
+    } else {
+      title = accountDisplay;
+    }
+  }
+  useTitle(title, '/:instance?/a/:id');
+
   const fetchAccount = useCallback(() => {
-    const fetchPromise =
-      fetchAccountPromiseRef.current || masto.v1.accounts.$select(id).fetch();
-    fetchAccountPromiseRef.current = fetchPromise;
-    return fetchPromise;
+    return memFetchAccount(id, masto);
   }, [id, masto]);
 
   useEffect(() => {
@@ -290,21 +340,45 @@ function AccountStatuses() {
 
   const { displayName, acct, emojis } = account || {};
 
+  const isSelf = useMemo(
+    () => account?.id === getCurrentAccountID(),
+    [account?.id],
+  );
+
   const filterBarRef = useRef();
   const TimelineStart = useMemo(() => {
+    const repliesFiltered = columnMode ? excludeReplies : !excludeReplies;
     const filtered =
-      !excludeReplies || excludeBoosts || tagged || media || !!month;
+      repliesFiltered || excludeBoosts || tagged || media || !!month;
     const cachedAccount = snapStates.accounts[`${id}@${instance}`];
+
+    const buildParamStr = (updates) => {
+      const params = new URLSearchParams(searchParams.toString());
+      for (const [key, val] of Object.entries(updates)) {
+        if (val == null) {
+          params.delete(key);
+        } else {
+          params.set(key, val);
+        }
+      }
+      const str = params.toString();
+      return str ? `?${str}` : '';
+    };
 
     return (
       <>
-        <AccountInfo
-          instance={instance}
-          account={cachedAccount || id}
-          fetchAccount={fetchAccount}
-          authenticated={authenticated}
-          standalone
-        />
+        {columnMode ? (
+          <AccountInfoMini account={account} instance={instance} />
+        ) : (
+          <AccountInfo
+            instance={instance}
+            account={cachedAccount || id}
+            fetchAccount={fetchAccount}
+            authenticated={authenticated}
+            standalone
+            showEndorsements
+          />
+        )}
         {!mediaFirst && (
           <div
             class="filter-bar"
@@ -317,84 +391,165 @@ function AccountStatuses() {
               <Link
                 to={`/${instance}/a/${id}`}
                 class="insignificant filter-clear"
-                title="Clear filters"
+                title={t`Reset filters`}
                 key="clear-filters"
+                onClick={(e) => {
+                  if (columnMode) {
+                    e.preventDefault();
+                    clearAndSetParam();
+                  }
+                }}
               >
-                <Icon icon="x" size="l" />
+                <Icon icon="x" size="l" alt={t`Reset filters`} />
               </Link>
             ) : (
-              <Icon icon="filter" class="insignificant" size="l" />
+              <Icon
+                icon="filter"
+                class="insignificant"
+                size="l"
+                alt={t`Filters`}
+              />
             )}
+            <div class="filter-bar-group">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={!excludeReplies}
+                  disabled={!!month}
+                  onChange={() => {
+                    toggleParam('replies', '1');
+                    if (excludeReplies) {
+                      showToast(t`Showing replies`);
+                    } else {
+                      showToast(t`Hiding replies`);
+                    }
+                  }}
+                />
+                <Trans>Replies</Trans>
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={!excludeBoosts}
+                  disabled={!!month}
+                  onChange={() => {
+                    toggleParam('boosts', '0');
+                    if (excludeBoosts) {
+                      showToast(t`Showing boosts`);
+                    } else {
+                      showToast(t`Hiding boosts`);
+                    }
+                  }}
+                />
+                <Trans>Boosts</Trans>
+              </label>
+            </div>
             <Link
-              to={`/${instance}/a/${id}${excludeReplies ? '?replies=1' : ''}`}
-              onClick={() => {
-                if (excludeReplies) {
-                  showToast('Showing post with replies');
+              to={`/${instance}/a/${id}${buildParamStr({
+                media: media ? null : '1',
+              })}`}
+              onClick={(e) => {
+                if (columnMode) {
+                  e.preventDefault();
+                  toggleParam('media', '1');
                 }
-              }}
-              class={excludeReplies ? '' : 'is-active'}
-            >
-              + Replies
-            </Link>
-            <Link
-              to={`/${instance}/a/${id}${excludeBoosts ? '' : '?boosts=0'}`}
-              onClick={() => {
-                if (!excludeBoosts) {
-                  showToast('Showing posts without boosts');
-                }
-              }}
-              class={!excludeBoosts ? '' : 'is-active'}
-            >
-              - Boosts
-            </Link>
-            <Link
-              to={`/${instance}/a/${id}${media ? '' : '?media=1'}`}
-              onClick={() => {
                 if (!media) {
-                  showToast('Showing posts with media');
+                  showToast(t`Showing posts with media`);
                 }
               }}
               class={media ? 'is-active' : ''}
             >
-              Media
+              <Trans>Media</Trans>
             </Link>
-            {featuredTags.map((tag) => (
-              <Link
-                key={tag.id}
-                to={`/${instance}/a/${id}${
-                  tagged === tag.name
-                    ? ''
-                    : `?tagged=${encodeURIComponent(tag.name)}`
-                }`}
-                onClick={() => {
-                  if (tagged !== tag.name) {
-                    showToast(`Showing posts tagged with #${tag.name}`);
-                  }
-                }}
-                class={tagged === tag.name ? 'is-active' : ''}
-              >
-                <span>
-                  <span class="more-insignificant">#</span>
-                  {tag.name}
-                </span>
-                {
-                  // The count differs based on instance 😅
-                }
-                {/* <span class="filter-count">{tag.statusesCount}</span> */}
-              </Link>
-            ))}
-            {searchEnabled &&
-              (supportsInputMonth ? (
-                <label class={`filter-field ${month ? 'is-active' : ''}`}>
-                  <Icon icon="month" size="l" />
-                  <input
-                    type="month"
+            {featuredTags.length > 0 && (
+              <div class="filter-bar-group">
+                {[...featuredTags]
+                  .sort((a, b) => {
+                    if (a.name === tagged) return -1;
+                    if (b.name === tagged) return 1;
+                    return 0;
+                  })
+                  .map((tag) => (
+                    <Link
+                      key={tag.id}
+                      to={`/${instance}/a/${id}${buildParamStr({
+                        tagged: tagged === tag.name ? null : tag.name,
+                      })}`}
+                      onClick={(e) => {
+                        if (columnMode) {
+                          e.preventDefault();
+                          const params = new URLSearchParams(
+                            searchParams.toString(),
+                          );
+                          if (params.get('tagged') === tag.name) {
+                            params.delete('tagged');
+                          } else {
+                            params.set('tagged', tag.name);
+                          }
+                          setSearchParams(params);
+                        }
+                        if (tagged !== tag.name) {
+                          showToast(t`Showing posts tagged with #${tag.name}`);
+                        }
+                      }}
+                      class={tagged === tag.name ? 'is-active' : ''}
+                    >
+                      <span>
+                        <span class="more-insignificant">#</span>
+                        {tag.name}
+                      </span>
+                      {/* <span class="filter-count">{tag.statusesCount}</span> */}
+                    </Link>
+                  ))}
+              </div>
+            )}
+            {searchEnabled && !columnMode && (
+              <>
+                <div class="filter-bar-separator" />
+                {supportsInputMonth() ? (
+                  <label class={`filter-field ${month ? 'is-active' : ''}`}>
+                    <Icon icon="month" size="l" />
+                    <input
+                      type="month"
+                      disabled={!account?.acct}
+                      value={month || ''}
+                      min={MIN_YEAR_MONTH}
+                      max={new Date().toISOString().slice(0, 7)}
+                      onInput={(e) => {
+                        const { value, validity } = e.currentTarget;
+                        if (!validity.valid) return;
+                        setSearchParams(
+                          value
+                            ? {
+                                month: value,
+                              }
+                            : {},
+                        );
+                        const [year, month] = value.split('-');
+                        const monthIndex = parseInt(month, 10) - 1;
+                        const date = new Date(year, monthIndex);
+                        showToast(
+                          t`Showing posts in ${date.toLocaleString(
+                            i18n.locale,
+                            {
+                              month: 'long',
+                              year: 'numeric',
+                            },
+                          )}`,
+                        );
+                      }}
+                    />
+                  </label>
+                ) : (
+                  // Fallback to <select> for month and <input type="number"> for year
+                  <MonthPicker
+                    class={`filter-field ${month ? 'is-active' : ''}`}
                     disabled={!account?.acct}
                     value={month || ''}
                     min={MIN_YEAR_MONTH}
                     max={new Date().toISOString().slice(0, 7)}
                     onInput={(e) => {
-                      const { value, validity } = e.currentTarget;
+                      const { value, validity } = e;
                       if (!validity.valid) return;
                       setSearchParams(
                         value
@@ -403,39 +558,30 @@ function AccountStatuses() {
                             }
                           : {},
                       );
-                      const [year, month] = value.split('-');
-                      const monthIndex = parseInt(month, 10) - 1;
-                      const date = new Date(year, monthIndex);
-                      showToast(
-                        `Showing posts in ${date.toLocaleString('default', {
-                          month: 'long',
-                          year: 'numeric',
-                        })}`,
-                      );
                     }}
                   />
-                </label>
-              ) : (
-                // Fallback to <select> for month and <input type="number"> for year
-                <MonthPicker
-                  class={`filter-field ${month ? 'is-active' : ''}`}
-                  disabled={!account?.acct}
-                  value={month || ''}
-                  min={MIN_YEAR_MONTH}
-                  max={new Date().toISOString().slice(0, 7)}
-                  onInput={(e) => {
-                    const { value, validity } = e;
-                    if (!validity.valid) return;
-                    setSearchParams(
-                      value
-                        ? {
-                            month: value,
-                          }
-                        : {},
-                    );
+                )}
+                <button
+                  type="button"
+                  class="filter-field"
+                  onClick={() => {
+                    states.showSearchCommand = {
+                      query: isSelf ? 'from:me ' : `from:${account?.acct} `,
+                    };
                   }}
-                />
-              ))}
+                >
+                  <Icon
+                    icon="search"
+                    size="l"
+                    alt={
+                      isSelf
+                        ? t`Search my posts`
+                        : t`Search @${account?.username}'s posts`
+                    }
+                  />
+                </button>
+              </>
+            )}
           </div>
         )}
       </>
@@ -451,139 +597,163 @@ function AccountStatuses() {
   ]);
 
   useEffect(() => {
-    // Focus on .is-active
-    const active = filterBarRef.current?.querySelector('.is-active');
-    if (active) {
-      console.log('active', active, active.offsetLeft);
-      filterBarRef.current.scrollTo({
-        behavior: 'smooth',
-        left:
-          active.offsetLeft -
-          (filterBarRef.current.offsetWidth - active.offsetWidth) / 2,
-      });
-    }
+    const activeEls = [
+      ...(filterBarRef.current?.querySelectorAll('.is-active') ?? []),
+    ];
+    if (!activeEls.length) return;
+    const barWidth = filterBarRef.current.offsetWidth;
+    const left = Math.min(...activeEls.map((el) => el.offsetLeft));
+    const right = Math.max(
+      ...activeEls.map((el) => el.offsetLeft + el.offsetWidth),
+    );
+    const spanWidth = right - left;
+    filterBarRef.current.scrollTo({
+      behavior: 'smooth',
+      left: spanWidth >= barWidth ? left : left - (barWidth - spanWidth) / 2,
+    });
   }, [featuredTags, searchEnabled, ...allSearchParams]);
 
   const accountInstance = useMemo(() => {
     if (!account?.url) return null;
-    const domain = URL.parse(account.url).hostname;
+    const domain = URL.parse(account.url)?.hostname;
     return domain;
   }, [account]);
   const sameInstance = instance === accountInstance;
   const allowSwitch = !!account && !sameInstance;
 
   return (
-    <Timeline
-      key={id}
-      title={`${account?.acct ? '@' + account.acct : 'Posts'}`}
-      titleComponent={
-        <h1
-          class="header-double-lines header-account"
-          // onClick={() => {
-          //   states.showAccount = {
-          //     account,
-          //     instance,
-          //   };
-          // }}
-        >
-          <b>
-            <EmojiText text={displayName} emojis={emojis} />
-          </b>
-          <div>
-            <span>@{acct}</span>
-          </div>
-        </h1>
-      }
-      id="account-statuses"
-      instance={instance}
-      emptyText="Nothing to see here yet."
-      errorText="Unable to load posts"
-      fetchItems={fetchAccountStatuses}
-      useItemID
-      view={media || mediaFirst ? 'media' : undefined}
-      boostsCarousel={snapStates.settings.boostsCarousel}
-      timelineStart={TimelineStart}
-      refresh={[
-        excludeReplies,
-        excludeBoosts,
-        tagged,
-        media,
-        month + account?.acct,
-      ].toString()}
-      headerEnd={
-        <Menu2
-          portal
-          // setDownOverflow
-          overflow="auto"
-          viewScroll="close"
-          position="anchor"
-          menuButton={
-            <button type="button" class="plain">
-              <Icon icon="more" size="l" />
-            </button>
-          }
-        >
-          <MenuItem
-            disabled={!allowSwitch}
-            onClick={() => {
-              (async () => {
-                try {
-                  const { masto } = api({
-                    instance: accountInstance,
-                  });
-                  const acc = await masto.v1.accounts.lookup({
-                    acct: account.acct,
-                  });
-                  const { id } = acc;
-                  location.hash = `/${accountInstance}/a/${id}`;
-                } catch (e) {
-                  console.error(e);
-                  alert('Unable to fetch account info');
-                }
-              })();
-            }}
+    <>
+      <Timeline
+        key={id}
+        title={`${account?.acct ? '@' + account.acct : t`Posts`}`}
+        titleComponent={
+          <h1
+            class="header-double-lines header-account"
+            // onClick={() => {
+            //   states.showAccount = {
+            //     account,
+            //     instance,
+            //   };
+            // }}
           >
-            <Icon icon="transfer" />{' '}
-            <small class="menu-double-lines">
-              Switch to account's instance{' '}
-              {accountInstance ? (
-                <>
-                  {' '}
-                  (<b>{punycode.toUnicode(accountInstance)}</b>)
-                </>
-              ) : null}
-            </small>
-          </MenuItem>
-          {!sameCurrentInstance && (
+            <b>
+              <EmojiText
+                text={displayName}
+                emojis={emojis}
+                resolverURL={account?.url}
+              />
+            </b>
+            <div>
+              <span class="bidi-isolate">@{acct}</span>
+            </div>
+          </h1>
+        }
+        id="account-statuses"
+        instance={instance}
+        emptyText={t`Nothing to see here yet.`}
+        errorText={t`Unable to load posts`}
+        fetchItems={fetchAccountStatuses}
+        useItemID
+        view={media || mediaFirst ? 'media' : undefined}
+        boostsCarousel={!isSelf && snapStates.settings.boostsCarousel}
+        timelineStart={TimelineStart}
+        refresh={[
+          excludeReplies,
+          excludeBoosts,
+          tagged,
+          media,
+          month + account?.acct,
+        ].toString()}
+        headerEnd={
+          <Menu2
+            portal
+            // setDownOverflow
+            overflow="auto"
+            viewScroll="close"
+            position="anchor"
+            menuButton={
+              <button type="button" class="plain">
+                <Icon icon="more" size="l" alt={t`More`} />
+              </button>
+            }
+          >
             <MenuItem
+              disabled={!allowSwitch}
               onClick={() => {
                 (async () => {
                   try {
-                    const acc = await currentMasto.v1.accounts.lookup({
-                      acct: account.acct + '@' + instance,
+                    const { masto } = api({
+                      instance: accountInstance,
+                    });
+                    const acc = await masto.v1.accounts.lookup({
+                      acct: account.acct,
                     });
                     const { id } = acc;
-                    location.hash = `/${currentInstance}/a/${id}`;
+                    location.hash = `/${accountInstance}/a/${id}`;
                   } catch (e) {
                     console.error(e);
-                    alert('Unable to fetch account info');
+                    alert(t`Unable to fetch account info`);
                   }
                 })();
               }}
             >
               <Icon icon="transfer" />{' '}
               <small class="menu-double-lines">
-                Switch to my instance (<b>{currentInstance}</b>)
+                <Trans>
+                  Switch to account's server{' '}
+                  {accountInstance ? (
+                    <>
+                      {' '}
+                      (<b>{punycode.toUnicode(accountInstance)}</b>)
+                    </>
+                  ) : null}
+                </Trans>
               </small>
             </MenuItem>
-          )}
-        </Menu2>
-      }
-    />
+            {!sameCurrentInstance && (
+              <MenuItem
+                onClick={() => {
+                  (async () => {
+                    try {
+                      const acc = await currentMasto.v1.accounts.lookup({
+                        acct: account.acct + '@' + instance,
+                      });
+                      const { id } = acc;
+                      location.hash = `/${currentInstance}/a/${id}`;
+                    } catch (e) {
+                      console.error(e);
+                      alert(t`Unable to fetch account info`);
+                    }
+                  })();
+                }}
+              >
+                <Icon icon="transfer" />{' '}
+                <small class="menu-double-lines">
+                  <Trans>
+                    Switch to my server (<b>{currentInstance}</b>)
+                  </Trans>
+                </small>
+              </MenuItem>
+            )}
+          </Menu2>
+        }
+      />
+      {acct && !isSelf && (
+        <data
+          class="compose-data"
+          value={JSON.stringify({
+            draftStatus: {
+              status: `@${acct} `,
+            },
+          })}
+        />
+      )}
+    </>
   );
 }
 
 function MonthPicker(props) {
+  const { i18n } = useLingui();
   const {
     class: className,
     disabled,
@@ -631,7 +801,9 @@ function MonthPicker(props) {
           });
         }}
       >
-        <option value="">Month</option>
+        <option value="">
+          <Trans>Month</Trans>
+        </option>
         <option disabled>-----</option>
         {Array.from({ length: 12 }, (_, i) => (
           <option
@@ -641,7 +813,7 @@ function MonthPicker(props) {
             }
             key={i}
           >
-            {new Date(0, i).toLocaleString('default', {
+            {new Date(0, i).toLocaleString(i18n.locale, {
               month: 'long',
             })}
           </option>
@@ -678,5 +850,12 @@ function MonthPicker(props) {
     </div>
   );
 }
+
+function fetchAccount(id, masto) {
+  return masto.v1.accounts.$select(id).fetch();
+}
+const memFetchAccount = pmem(fetchAccount, {
+  expires: 30 * 60 * 1000, // 30 minutes
+});
 
 export default AccountStatuses;
