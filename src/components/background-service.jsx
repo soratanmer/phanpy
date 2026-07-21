@@ -1,8 +1,10 @@
+import { useLingui } from '@lingui/react/macro';
 import { memo } from 'preact/compat';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { useHotkeys } from 'react-hotkeys-hook';
 
 import { api } from '../utils/api';
+import { useAuth } from '../utils/auth-context';
 import showToast from '../utils/show-toast';
 import states, { saveStatus } from '../utils/states';
 import useInterval from '../utils/useInterval';
@@ -11,17 +13,33 @@ import usePageVisibility from '../utils/usePageVisibility';
 const STREAMING_TIMEOUT = 1000 * 3; // 3 seconds
 const POLL_INTERVAL = 20_000; // 20 seconds
 
-export default memo(function BackgroundService({ isLoggedIn }) {
+export default memo(function BackgroundService() {
+  const isLoggedIn = useAuth();
+  const { t } = useLingui();
+
   // Notifications service
   // - WebSocket to receive notifications when page is visible
   const [visible, setVisible] = useState(true);
-  usePageVisibility(setVisible);
+  const visibleTimeout = useRef();
+  usePageVisibility((visible) => {
+    clearTimeout(visibleTimeout.current);
+    if (visible) {
+      setVisible(true);
+    } else {
+      visibleTimeout.current = setTimeout(() => {
+        setVisible(false);
+      }, POLL_INTERVAL);
+    }
+  });
+
   const checkLatestNotification = async (masto, instance, skipCheckMarkers) => {
     if (states.notificationsLast) {
-      const notificationsIterator = masto.v1.notifications.list({
-        limit: 1,
-        sinceId: states.notificationsLast.id,
-      });
+      const notificationsIterator = masto.v1.notifications
+        .list({
+          limit: 1,
+          sinceId: states.notificationsLast.id,
+        })
+        .values();
       const { value: notifications } = await notificationsIterator.next();
       if (notifications?.length) {
         if (skipCheckMarkers) {
@@ -48,24 +66,30 @@ export default memo(function BackgroundService({ isLoggedIn }) {
     let sub;
     let streamTimeout;
     let pollNotifications;
+    let cancelled = false;
     if (isLoggedIn && visible) {
       const { masto, streaming, instance } = api();
       (async () => {
         // 1. Get the latest notification
         await checkLatestNotification(masto, instance);
 
-        let hasStreaming = false;
-        // 2. Start streaming
+        const startPolling = () => {
+          if (cancelled) return;
+          console.log('🎏 Fallback to polling');
+          pollNotifications = setInterval(() => {
+            checkLatestNotification(masto, instance, true);
+          }, POLL_INTERVAL);
+        };
+
+        // 2. Start streaming or fall back to polling
         if (streaming) {
           streamTimeout = setTimeout(() => {
             (async () => {
               try {
-                hasStreaming = true;
                 sub = streaming.user.notification.subscribe();
                 console.log('🎏 Streaming notification', sub);
                 for await (const entry of sub) {
-                  if (!sub) break;
-                  if (!visible) break;
+                  if (cancelled || !sub) break;
                   console.log('🔔🔔 Notification entry', entry);
                   if (entry.event === 'notification') {
                     console.log('🔔🔔 Notification', entry);
@@ -77,22 +101,20 @@ export default memo(function BackgroundService({ isLoggedIn }) {
                 }
                 console.log('💥 Streaming notification loop STOPPED');
               } catch (e) {
-                hasStreaming = false;
-                console.error(e);
+                console.error('💥 Streaming error', e);
               }
 
-              if (!hasStreaming) {
-                console.log('🎏 Streaming failed, fallback to polling');
-                pollNotifications = setInterval(() => {
-                  checkLatestNotification(masto, instance, true);
-                }, POLL_INTERVAL);
-              }
+              startPolling();
             })();
           }, STREAMING_TIMEOUT);
+        } else {
+          console.log('🎏 No streaming available, polling directly');
+          startPolling();
         }
       })();
     }
     return () => {
+      cancelled = true;
       sub?.unsubscribe?.();
       sub = null;
       clearTimeout(streamTimeout);
@@ -130,13 +152,22 @@ export default memo(function BackgroundService({ isLoggedIn }) {
   });
 
   // Global keyboard shortcuts "service"
-  useHotkeys('shift+alt+k', () => {
-    const currentCloakMode = states.settings.cloakMode;
-    states.settings.cloakMode = !currentCloakMode;
-    showToast({
-      text: `Cloak mode ${currentCloakMode ? 'disabled' : 'enabled'}`,
-    });
-  });
+  useHotkeys(
+    'shift+alt+k',
+    (e) => {
+      // Need modifers check due to useKey: true
+      if (!e.shiftKey || !e.altKey) return;
+
+      const currentCloakMode = states.settings.cloakMode;
+      states.settings.cloakMode = !currentCloakMode;
+      showToast({
+        text: currentCloakMode ? t`Cloak mode disabled` : t`Cloak mode enabled`,
+      });
+    },
+    {
+      ignoreEventWhen: (e) => e.metaKey || e.ctrlKey,
+    },
+  );
 
   return null;
 });
