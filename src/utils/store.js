@@ -1,4 +1,23 @@
+import Cookies from 'js-cookie';
+
 import { getCurrentAccountNS } from './store-utils';
+
+const cookies = Cookies.withAttributes({ sameSite: 'strict', secure: true });
+
+const canSetSecureCookie =
+  navigator.cookieEnabled &&
+  (() => {
+    try {
+      const key = '__phanpy_can_set_secure_cookie__';
+      const value = '1';
+      cookies.set(key, value);
+      const result = cookies.get(key) === value;
+      cookies.remove(key);
+      return result;
+    } catch (e) {
+      return false;
+    }
+  })();
 
 const local = {
   get: (key) => {
@@ -86,6 +105,38 @@ const session = {
   },
 };
 
+// Session secure cookie
+const cookie = {
+  get: (key) => cookies.get(key),
+  set: (key, value) => cookies.set(key, value),
+  del: (key) => cookies.remove(key),
+};
+
+// Cookie with sessionStorage fallback
+const sessionCookie = {
+  get: (key) => {
+    if (canSetSecureCookie) {
+      return cookie.get(key);
+    } else {
+      return session.get(key);
+    }
+  },
+  set: (key, value) => {
+    if (canSetSecureCookie) {
+      return cookie.set(key, value);
+    } else {
+      return session.set(key, value);
+    }
+  },
+  del: (key) => {
+    if (canSetSecureCookie) {
+      return cookie.del(key);
+    } else {
+      return session.del(key);
+    }
+  },
+};
+
 // Store with account namespace (id@domain.tld) <- uses id, not username
 const account = {
   get: (key) => {
@@ -118,4 +169,4 @@ const account = {
   },
 };
 
-export default { local, session, account };
+export default { local, session, sessionCookie, cookie, account };
