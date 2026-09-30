@@ -1,9 +1,11 @@
+import { useLingui } from '@lingui/react/macro';
 import { useEffect } from 'preact/hooks';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { subscribe, useSnapshot } from 'valtio';
 
 import Accounts from '../pages/accounts';
 import Settings from '../pages/settings';
+import { useAuth } from '../utils/auth-context';
 import focusDeck from '../utils/focus-deck';
 import showToast from '../utils/show-toast';
 import states from '../utils/states';
@@ -13,9 +15,13 @@ import ComposeSuspense, { preload } from './compose-suspense';
 import Drafts from './drafts';
 import EmbedModal from './embed-modal';
 import GenericAccounts from './generic-accounts';
+import ImportExportAccounts from './import-export-accounts';
 import MediaAltModal from './media-alt-modal';
 import MediaModal from './media-modal';
 import Modal from './modal';
+import OpenLinkSheet from './open-link-sheet';
+import QrCodeModal from './qr-code-modal';
+import QrScannerModal from './qr-scanner-modal';
 import ReportModal from './report-modal';
 import ShortcutsSettings from './shortcuts-settings';
 
@@ -29,9 +35,11 @@ subscribe(states, (changes) => {
 });
 
 export default function Modals() {
+  const { t } = useLingui();
   const snapStates = useSnapshot(states);
   const navigate = useNavigate();
   const location = useLocation();
+  const isLoggedIn = useAuth();
 
   useEffect(() => {
     setTimeout(preload, 1000);
@@ -39,7 +47,7 @@ export default function Modals() {
 
   return (
     <>
-      {!!snapStates.showCompose && (
+      {isLoggedIn && !!snapStates.showCompose && (
         <Modal
           class={`solid ${snapStates.composerState.minimized ? 'min' : ''}`}
           minimized={!!snapStates.composerState.minimized}
@@ -49,6 +57,11 @@ export default function Modals() {
               typeof snapStates.showCompose !== 'boolean'
                 ? snapStates.showCompose.replyToStatus
                 : window.__COMPOSE__?.replyToStatus || null
+            }
+            replyMode={
+              states.showCompose?.replyMode ||
+              window.__COMPOSE__?.replyMode ||
+              'all'
             }
             editStatus={
               states.showCompose?.editStatus ||
@@ -60,28 +73,44 @@ export default function Modals() {
               window.__COMPOSE__?.draftStatus ||
               null
             }
+            quoteStatus={
+              states.showCompose?.quoteStatus ||
+              window.__COMPOSE__?.quoteStatus ||
+              null
+            }
+            sharedData={window.__SHARED_DATA__ || null}
             onClose={(results) => {
-              const { newStatus, instance, type } = results || {};
+              const { newStatus, instance, type, scheduledAt } = results || {};
               states.showCompose = false;
               window.__COMPOSE__ = null;
+              window.__SHARED_DATA__ = null;
               if (newStatus) {
                 states.reloadStatusPage++;
+                if (scheduledAt) states.reloadScheduledPosts++;
                 showToast({
                   text: {
-                    post: 'Post published. Check it out.',
-                    reply: 'Reply posted. Check it out.',
-                    edit: 'Post updated. Check it out.',
+                    post: scheduledAt
+                      ? t`Post scheduled`
+                      : t`Post published. Check it out.`,
+                    reply: scheduledAt
+                      ? t`Reply scheduled`
+                      : t`Reply posted. Check it out.`,
+                    edit: t`Post updated. Check it out.`,
                   }[type || 'post'],
                   delay: 1000,
                   duration: 10_000, // 10 seconds
                   onClick: (toast) => {
                     toast.hideToast();
                     states.prevLocation = location;
-                    navigate(
-                      instance
-                        ? `/${instance}/s/${newStatus.id}`
-                        : `/s/${newStatus.id}`,
-                    );
+                    if (scheduledAt) {
+                      navigate('/sp');
+                    } else {
+                      navigate(
+                        instance
+                          ? `/${instance}/s/${newStatus.id}`
+                          : `/s/${newStatus.id}`,
+                      );
+                    }
                   },
                 });
               }
@@ -89,7 +118,7 @@ export default function Modals() {
           />
         </Modal>
       )}
-      {!!snapStates.showSettings && (
+      {isLoggedIn && !!snapStates.showSettings && (
         <Modal
           onClose={() => {
             states.showSettings = false;
@@ -102,7 +131,7 @@ export default function Modals() {
           />
         </Modal>
       )}
-      {!!snapStates.showAccounts && (
+      {isLoggedIn && !!snapStates.showAccounts && (
         <Modal
           onClose={() => {
             states.showAccounts = false;
@@ -134,7 +163,22 @@ export default function Modals() {
           />
         </Modal>
       )}
-      {!!snapStates.showDrafts && (
+      {!!snapStates.showOpenLink && (
+        <Modal
+          onClose={() => {
+            states.showOpenLink = false;
+          }}
+        >
+          <OpenLinkSheet
+            url={snapStates.showOpenLink.url}
+            linkText={snapStates.showOpenLink.linkText}
+            onClose={() => {
+              states.showOpenLink = false;
+            }}
+          />
+        </Modal>
+      )}
+      {isLoggedIn && !!snapStates.showDrafts && (
         <Modal
           onClose={() => {
             states.showDrafts = false;
@@ -157,7 +201,7 @@ export default function Modals() {
           <MediaModal
             mediaAttachments={snapStates.showMediaModal.mediaAttachments}
             instance={snapStates.showMediaModal.instance}
-            index={snapStates.showMediaModal.index}
+            index={snapStates.showMediaModal.mediaIndex}
             statusID={snapStates.showMediaModal.statusID}
             onClose={() => {
               states.showMediaModal = false;
@@ -165,7 +209,7 @@ export default function Modals() {
           />
         </Modal>
       )}
-      {!!snapStates.showShortcutsSettings && (
+      {isLoggedIn && !!snapStates.showShortcutsSettings && (
         <Modal
           onClose={() => {
             states.showShortcutsSettings = false;
@@ -226,7 +270,7 @@ export default function Modals() {
           />
         </Modal>
       )}
-      {!!snapStates.showReportModal && (
+      {isLoggedIn && !!snapStates.showReportModal && (
         <Modal
           onClose={() => {
             states.showReportModal = false;
@@ -238,6 +282,62 @@ export default function Modals() {
             onClose={() => {
               states.showReportModal = false;
             }}
+          />
+        </Modal>
+      )}
+      {!!snapStates.showQrCodeModal && (
+        <Modal
+          class="solid"
+          onClose={() => {
+            states.showQrCodeModal = false;
+          }}
+        >
+          <QrCodeModal
+            text={snapStates.showQrCodeModal.text}
+            arena={snapStates.showQrCodeModal.arena}
+            backgroundMask={snapStates.showQrCodeModal.backgroundMask}
+            caption={snapStates.showQrCodeModal.caption}
+            onClose={() => {
+              states.showQrCodeModal = false;
+            }}
+            onScannerClick={snapStates.showQrCodeModal.onScannerClick}
+          />
+        </Modal>
+      )}
+      {!!snapStates.showQrScannerModal && (
+        <Modal
+          class="solid"
+          onClose={() => {
+            states.showQrScannerModal = false;
+          }}
+        >
+          <QrScannerModal
+            checkValidity={snapStates.showQrScannerModal.checkValidity}
+            actionableText={snapStates.showQrScannerModal.actionableText}
+            onClose={(...args) => {
+              if (snapStates.showQrScannerModal.onClose) {
+                snapStates.showQrScannerModal.onClose(...args);
+              }
+              states.showQrScannerModal = false;
+            }}
+          />
+        </Modal>
+      )}
+      {isLoggedIn && !!snapStates.showImportExportAccounts && (
+        <Modal
+          onClose={() => {
+            states.showImportExportAccounts = false;
+          }}
+        >
+          <ImportExportAccounts
+            onClose={() => {
+              states.showImportExportAccounts = false;
+            }}
+            exportDisabled={
+              typeof snapStates.showImportExportAccounts === 'object'
+                ? snapStates.showImportExportAccounts.exportDisabled
+                : false
+            }
           />
         </Modal>
       )}

@@ -1,8 +1,10 @@
+import { useLingui } from '@lingui/react/macro';
 import { memo } from 'preact/compat';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { useHotkeys } from 'react-hotkeys-hook';
 
 import { api } from '../utils/api';
+import { useAuth } from '../utils/auth-context';
 import showToast from '../utils/show-toast';
 import states, { saveStatus } from '../utils/states';
 import useInterval from '../utils/useInterval';
@@ -11,19 +13,59 @@ import usePageVisibility from '../utils/usePageVisibility';
 const STREAMING_TIMEOUT = 1000 * 3; // 3 seconds
 const POLL_INTERVAL = 20_000; // 20 seconds
 
-export default memo(function BackgroundService({ isLoggedIn }) {
+export default memo(function BackgroundService() {
+  const isLoggedIn = useAuth();
+  const { t } = useLingui();
+
   // Notifications service
   // - WebSocket to receive notifications when page is visible
   const [visible, setVisible] = useState(true);
-  usePageVisibility(setVisible);
+  const visibleTimeout = useRef();
+  usePageVisibility((visible) => {
+    clearTimeout(visibleTimeout.current);
+    if (visible) {
+      setVisible(true);
+    } else {
+      visibleTimeout.current = setTimeout(() => {
+        setVisible(false);
+      }, POLL_INTERVAL);
+    }
+  });
+
+  const checkingLatestNotificationRef = useRef(false);
   const checkLatestNotification = async (masto, instance, skipCheckMarkers) => {
-    if (states.notificationsLast) {
-      const notificationsIterator = masto.v1.notifications.list({
-        limit: 1,
-        sinceId: states.notificationsLast.id,
-      });
-      const { value: notifications } = await notificationsIterator.next();
+    // Avoid overlapping checks (e.g. a slow request still in-flight when
+    // the next poll tick fires)
+    if (checkingLatestNotificationRef.current) return;
+    checkingLatestNotificationRef.current = true;
+    try {
+      const checkedId = states.notificationsLast?.id;
+      if (!checkedId) return;
+
+      let notifications;
+      try {
+        const notificationsIterator = masto.v1.notifications
+          .list({
+            limit: 1,
+            sinceId: checkedId,
+          })
+          .values();
+        ({ value: notifications } = await notificationsIterator.next());
+      } catch (e) {
+        // Network/server error - bail out quietly, try again on next check
+        console.error('💥 Failed to check latest notification', e);
+        return;
+      }
+
+      // Ignore stale response
+      if (states.notificationsLast?.id !== checkedId) return;
+
       if (notifications?.length) {
+        const latestId = notifications[0].id;
+
+        // Nothing new if checkedId itself is returned
+        if (latestId === checkedId) return;
+
         if (skipCheckMarkers) {
           states.notificationsShowNew = true;
         } else {
@@ -34,13 +76,35 @@ export default memo(function BackgroundService({ isLoggedIn }) {
             });
             lastReadId = markers?.notifications?.lastReadId;
           } catch (e) {}
+
+          // Stale check again after await
+          if (states.notificationsLast?.id !== checkedId) return;
+
           if (lastReadId) {
-            states.notificationsShowNew = notifications[0].id !== lastReadId;
+            // Also handles race where notifications were just marked as read
+            // but the marker hasn't landed on the server yet
+            states.notificationsShowNew = latestId !== lastReadId;
           } else {
             states.notificationsShowNew = true;
           }
         }
+      } else if (!skipCheckMarkers && states.notificationsShowNew) {
+        // Self-heal: clear stuck dot if server says everything's read
+        try {
+          const markers = await masto.v1.markers.fetch({
+            timeline: 'notifications',
+          });
+          const lastReadId = markers?.notifications?.lastReadId;
+          if (
+            lastReadId === checkedId &&
+            states.notificationsLast?.id === checkedId
+          ) {
+            states.notificationsShowNew = false;
+          }
+        } catch (e) {}
       }
+    } finally {
+      checkingLatestNotificationRef.current = false;
     }
   };
 
@@ -48,51 +112,56 @@ export default memo(function BackgroundService({ isLoggedIn }) {
     let sub;
     let streamTimeout;
     let pollNotifications;
+    let cancelled = false;
     if (isLoggedIn && visible) {
       const { masto, streaming, instance } = api();
       (async () => {
         // 1. Get the latest notification
         await checkLatestNotification(masto, instance);
 
-        let hasStreaming = false;
-        // 2. Start streaming
+        const startPolling = () => {
+          if (cancelled) return;
+          console.log('🎏 Fallback to polling');
+          pollNotifications = setInterval(() => {
+            checkLatestNotification(masto, instance, true);
+          }, POLL_INTERVAL);
+        };
+
+        // 2. Start streaming or fall back to polling
         if (streaming) {
           streamTimeout = setTimeout(() => {
             (async () => {
               try {
-                hasStreaming = true;
                 sub = streaming.user.notification.subscribe();
                 console.log('🎏 Streaming notification', sub);
                 for await (const entry of sub) {
-                  if (!sub) break;
-                  if (!visible) break;
+                  if (cancelled || !sub) break;
                   console.log('🔔🔔 Notification entry', entry);
                   if (entry.event === 'notification') {
                     console.log('🔔🔔 Notification', entry);
                     saveStatus(entry.payload, instance, {
                       skipThreading: true,
                     });
+                    // Only actual notifications show the dot
+                    states.notificationsShowNew = true;
                   }
-                  states.notificationsShowNew = true;
                 }
                 console.log('💥 Streaming notification loop STOPPED');
               } catch (e) {
-                hasStreaming = false;
-                console.error(e);
+                console.error('💥 Streaming error', e);
               }
 
-              if (!hasStreaming) {
-                console.log('🎏 Streaming failed, fallback to polling');
-                pollNotifications = setInterval(() => {
-                  checkLatestNotification(masto, instance, true);
-                }, POLL_INTERVAL);
-              }
+              startPolling();
             })();
           }, STREAMING_TIMEOUT);
+        } else {
+          console.log('🎏 No streaming available, polling directly');
+          startPolling();
         }
       })();
     }
     return () => {
+      cancelled = true;
       sub?.unsubscribe?.();
       sub = null;
       clearTimeout(streamTimeout);
@@ -130,13 +199,22 @@ export default memo(function BackgroundService({ isLoggedIn }) {
   });
 
   // Global keyboard shortcuts "service"
-  useHotkeys('shift+alt+k', () => {
-    const currentCloakMode = states.settings.cloakMode;
-    states.settings.cloakMode = !currentCloakMode;
-    showToast({
-      text: `Cloak mode ${currentCloakMode ? 'disabled' : 'enabled'}`,
-    });
-  });
+  useHotkeys(
+    'shift+alt+k',
+    (e) => {
+      // Need modifers check due to useKey: true
+      if (!e.shiftKey || !e.altKey) return;
+
+      const currentCloakMode = states.settings.cloakMode;
+      states.settings.cloakMode = !currentCloakMode;
+      showToast({
+        text: currentCloakMode ? t`Cloak mode disabled` : t`Cloak mode enabled`,
+      });
+    },
+    {
+      ignoreEventWhen: (e) => e.metaKey || e.ctrlKey,
+    },
+  );
 
   return null;
 });

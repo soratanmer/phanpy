@@ -64,6 +64,10 @@
 }
 #shortcuts-settings-container .shortcuts-view-mode label img {
   max-height: 64px;
+
+  &:dir(rtl) {
+    transform: scaleX(-1);
+  }
 }
 @media (prefers-color-scheme: dark) {
   #shortcuts-settings-container .shortcuts-view-mode label img {
@@ -82,12 +86,11 @@
 }
 #shortcuts-settings-container .shortcuts-view-mode label input ~ * {
   opacity: 0.5;
-  transform-origin: bottom;
-  transform: scale(0.975);
-  transition: all 0.2s ease-out;
+  transition: opacity 0.2s ease-out;
 }
 #shortcuts-settings-container .shortcuts-view-mode label.checked {
-  box-shadow: inset 0 0 0 3px var(--link-color),
+  box-shadow:
+    inset 0 0 0 3px var(--link-color),
     inset 0 0 32px var(--link-faded-color);
 }
 #shortcuts-settings-container
@@ -95,7 +98,6 @@
   label
   input:is(:hover, :active, :checked)
   ~ * {
-  transform: scale(1);
   opacity: 1;
 }
 
@@ -156,7 +158,7 @@
 
   &.field-button {
     display: flex;
-    gap: 8px;
+    gap: 4px;
 
     button {
       flex-shrink: 0;

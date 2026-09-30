@@ -1,13 +1,21 @@
-name: Pull Request to `main` from `production`
+name: Pull Request into `production` from `main`
 
 on:
   push:
     branches:
       - main
+  pull_request:
+    types: [closed]
+    branches:
+      - main
 
 jobs:
   auto-pull-request:
+    if: github.repository == 'cheeaun/phanpy'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: vsoch/pull-request-action@master
         env:

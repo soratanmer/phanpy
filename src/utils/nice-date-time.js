@@ -1,31 +1,26 @@
-import mem from './mem';
+import { i18n } from '@lingui/core';
 
-const { locale } = new Intl.DateTimeFormat().resolvedOptions();
+import DateTimeFormat from './date-time-format';
 
-const _DateTimeFormat = (opts) => {
-  const { dateYear, hideTime, formatOpts } = opts || {};
+function niceDateTime(date, dtfOpts) {
+  if (!(date instanceof Date)) {
+    date = new Date(date);
+  }
+
+  const { hideTime, formatOpts, forceOpts } = dtfOpts || {};
   const currentYear = new Date().getFullYear();
-  return Intl.DateTimeFormat(locale, {
+  const options = forceOpts || {
     // Show year if not current year
-    year: dateYear === currentYear ? undefined : 'numeric',
+    year: date.getFullYear() === currentYear ? undefined : 'numeric',
     month: 'short',
     day: 'numeric',
     // Hide time if requested
     hour: hideTime ? undefined : 'numeric',
     minute: hideTime ? undefined : 'numeric',
     ...formatOpts,
-  });
-};
-const DateTimeFormat = mem(_DateTimeFormat);
+  };
 
-function niceDateTime(date, dtfOpts) {
-  if (!(date instanceof Date)) {
-    date = new Date(date);
-  }
-  const DTF = DateTimeFormat({
-    dateYear: date.getFullYear(),
-    ...dtfOpts,
-  });
+  const DTF = DateTimeFormat(i18n.locale, options);
   const dateText = DTF.format(date);
   return dateText;
 }

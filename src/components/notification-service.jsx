@@ -1,8 +1,10 @@
+import { Trans, useLingui } from '@lingui/react/macro';
 import { memo } from 'preact/compat';
 import { useLayoutEffect, useState } from 'preact/hooks';
 import { useSnapshot } from 'valtio';
 
 import { api } from '../utils/api';
+import { handlePushSubscriptionChange } from '../utils/push-notifications';
 import states from '../utils/states';
 import {
   getAccountByAccessToken,
@@ -17,21 +19,36 @@ import Notification from './notification';
 
 {
   if ('serviceWorker' in navigator) {
-    console.log('👂👂👂 Listen to message');
-    navigator.serviceWorker.addEventListener('message', (event) => {
+    const handleMessage = (event) => {
       console.log('💥💥💥 Message event', event);
-      const { type, id, accessToken } = event?.data || {};
+      const { type, id, accessToken, oldEndpoint, newSubscription } =
+        event?.data || {};
       if (type === 'notification') {
         states.routeNotification = {
           id,
           accessToken,
         };
+      } else if (type === 'pushsubscriptionchange') {
+        if (!getCurrentAccount()) return;
+        handlePushSubscriptionChange({ oldEndpoint, newSubscription }).catch(
+          (err) => {
+            console.warn('🔔 Failed to handle push subscription change', err);
+          },
+        );
       }
-    });
+    };
+    navigator.serviceWorker.addEventListener('message', handleMessage);
+
+    if (import.meta.hot) {
+      import.meta.hot.dispose(() => {
+        navigator.serviceWorker.removeEventListener('message', handleMessage);
+      });
+    }
   }
 }
 
 export default memo(function NotificationService() {
+  const { t } = useLingui();
   if (!('serviceWorker' in navigator)) return null;
 
   const snapStates = useSnapshot(states);
@@ -98,26 +115,6 @@ export default memo(function NotificationService() {
     })();
   }, [id, accessToken]);
 
-  // useLayoutEffect(() => {
-  //   // Listen to message from service worker
-  //   const handleMessage = (event) => {
-  //     console.log('💥💥💥 Message event', event);
-  //     const { type, id, accessToken } = event?.data || {};
-  //     if (type === 'notification') {
-  //       states.routeNotification = {
-  //         id,
-  //         accessToken,
-  //       };
-  //     }
-  //   };
-  //   console.log('👂👂👂 Listen to message');
-  //   navigator.serviceWorker.addEventListener('message', handleMessage);
-  //   return () => {
-  //     console.log('👂👂👂 Remove listen to message');
-  //     navigator.serviceWorker.removeEventListener('message', handleMessage);
-  //   };
-  // }, []);
-
   useLayoutEffect(() => {
     if (navigator?.clearAppBadge) {
       navigator.clearAppBadge();
@@ -152,14 +149,18 @@ export default memo(function NotificationService() {
       >
         <div class="sheet" tabIndex="-1">
           <button type="button" class="sheet-close" onClick={onClose}>
-            <Icon icon="x" />
+            <Icon icon="x" alt={t`Close`} />
           </button>
           <header>
-            <b>Notification</b>
+            <b>
+              <Trans>Notification</Trans>
+            </b>
           </header>
           <main>
             {!sameInstance && (
-              <p>This notification is from your other account.</p>
+              <p>
+                <Trans>This notification is from your other account.</Trans>
+              </p>
             )}
             <div
               class="notification-peek"
@@ -186,7 +187,10 @@ export default memo(function NotificationService() {
               }}
             >
               <Link to="/notifications" class="button light" onClick={onClose}>
-                <span>View all notifications</span> <Icon icon="arrow-right" />
+                <span>
+                  <Trans>View all notifications</Trans>
+                </span>{' '}
+                <Icon icon="arrow-right" />
               </Link>
             </div>
           </main>

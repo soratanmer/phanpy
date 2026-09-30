@@ -1,7 +1,7 @@
 .avatar {
   display: inline-block;
   line-height: 0;
-  aspect-ratio: 1/1;
+  aspect-ratio: 1 / 1;
   border-radius: 50%;
   overflow: hidden;
   background-color: var(--bg-faded-color);
@@ -20,6 +20,10 @@
   }
   &:not(.has-alpha).squircle {
     border-radius: 25%;
+    @supports (corner-shape: squircle) {
+      corner-shape: squircle;
+      border-radius: 50%;
+    }
   }
 
   img {

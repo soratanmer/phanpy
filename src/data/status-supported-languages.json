@@ -167,7 +167,7 @@
 	[
 		"dv",
 		"Divehi",
-		"Dhivehi"
+		"ދިވެހި"
 	],
 	[
 		"dz",
@@ -492,7 +492,7 @@
 	[
 		"lv",
 		"Latvian",
-		"latviešu valoda"
+		"Latviski"
 	],
 	[
 		"mg",
@@ -523,6 +523,11 @@
 		"mn",
 		"Mongolian",
 		"Монгол хэл"
+	],
+	[
+		"mn-Mong",
+		"Traditional Mongolian",
+		"ᠮᠣᠩᠭᠣᠯ ᠬᠡᠯᠡ"
 	],
 	[
 		"mr",
@@ -802,7 +807,7 @@
 	[
 		"tl",
 		"Tagalog",
-		"Wikang Tagalog"
+		"Tagalog"
 	],
 	[
 		"tn",
@@ -960,6 +965,11 @@
 		"Kaszëbsczi"
 	],
 	[
+		"gsw",
+		"Swiss German",
+		"Schwiizertütsch"
+	],
+	[
 		"jbo",
 		"Lojban",
 		"la .lojban."
@@ -980,6 +990,11 @@
 		"lingua franca nova"
 	],
 	[
+		"lzz",
+		"Lazuri",
+		"ლაზური ნენა"
+	],
+	[
 		"moh",
 		"Mohawk",
 		"Kanienʼkéha"
@@ -988,6 +1003,11 @@
 		"nds",
 		"Low German",
 		"Plattdüütsch"
+	],
+	[
+		"ota",
+		"Ottoman Turkish",
+		"لسان عثمانی"
 	],
 	[
 		"pdc",
@@ -1030,6 +1050,11 @@
 		"Хальмг келн"
 	],
 	[
+		"xmf",
+		"Mingrelian",
+		"მარგალური ნინა"
+	],
+	[
 		"zba",
 		"Balaibalan",
 		"باليبلن"
@@ -1038,5 +1063,10 @@
 		"zgh",
 		"Standard Moroccan Tamazight",
 		"ⵜⴰⵎⴰⵣⵉⵖⵜ"
+	],
+	[
+		"nan-TW",
+		"Hokkien (Taiwan)",
+		"臺語 (Hô-ló話)"
 	]
 ]
